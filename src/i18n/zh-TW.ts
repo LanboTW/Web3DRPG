@@ -1,0 +1,27 @@
+export const zhTW = {
+  'game.title': '殘燼之劍',
+  'loading.renderer': '初始化繪圖引擎…',
+  'loading.world': '生成世界…',
+  'loading.player': '召喚劍士…',
+  'loading.ready': '準備完成',
+  'action.attack': '攻擊',
+  'action.dodge': '閃避',
+  'action.skill1': '技1',
+  'action.skill2': '技2',
+  'action.ultimate': '奧義',
+  'action.lock': '鎖定',
+  'settings.title': '設定',
+  'settings.quality': '畫質',
+  'settings.auto': '自動',
+  'quality.low': '低',
+  'quality.medium': '中',
+  'quality.high': '高',
+  'settings.controls': '操作說明',
+  'help.pc': 'WASD 移動・Shift 奔跑・滑鼠 轉視角・滾輪 縮放\n左鍵 攻擊・空白鍵 閃避・Q/E 技能・R 奧義\nTab/中鍵 鎖定・F 互動・Esc 釋放滑鼠',
+  'help.touch': '左側搖桿 移動（推到底奔跑）・右側滑動 轉視角\n右下按鈕 攻擊／閃避／技能',
+  'help.gamepad': '手把：左搖桿 移動・右搖桿 視角・X 攻擊・A 閃避\nLB/RB 技能・RT 奧義・R3 鎖定・按住 LT 奔跑',
+  'hint.clickToPlay': '點擊畫面開始操作',
+  'error.renderer': '你的瀏覽器不支援 WebGPU / WebGL2，無法執行遊戲。',
+} as const;
+
+export type I18nKey = keyof typeof zhTW;

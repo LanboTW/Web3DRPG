@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Web3DRPG</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="loading">
+      <div class="loading-title" data-i18n="game.title"></div>
+      <div class="loading-bar"><div class="loading-fill"></div></div>
+      <div class="loading-text"></div>
+    </div>
+    <div id="hud" hidden>
+      <div id="stats"></div>
+      <button id="btn-settings" class="hud-btn" aria-label="settings">⚙</button>
+      <div id="hint"></div>
+    </div>
+    <div id="settings" hidden></div>
+    <div id="touch" hidden>
+      <div id="joy-base"><div id="joy-knob"></div></div>
+      <div id="touch-buttons">
+        <button data-action="attack" class="tb tb-big" data-i18n="action.attack"></button>
+        <button data-action="dodge" class="tb" data-i18n="action.dodge"></button>
+        <button data-action="skill1" class="tb" data-i18n="action.skill1"></button>
+        <button data-action="skill2" class="tb" data-i18n="action.skill2"></button>
+        <button data-action="ultimate" class="tb" data-i18n="action.ultimate"></button>
+        <button data-action="lock" class="tb tb-small" data-i18n="action.lock"></button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
