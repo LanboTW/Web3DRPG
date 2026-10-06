@@ -49,8 +49,9 @@ export async function loadCharacter(path: string, onProgress?: (fraction: number
  */
 function fixMaterial(mesh: THREE.Mesh): void {
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  const alphaCard = /hair|ponytail|braid|bob|eyebrow|eyelash/i.test(mesh.name);
   for (const m of mats as THREE.MeshStandardMaterial[]) {
+    const id = `${mesh.name} ${m.name}`;
+    const alphaCard = /hair|ponytail|braid|bob|short0|eyebrow|eyelash/i.test(id);
     m.transparent = false;
     m.depthWrite = true;
     if (alphaCard) {
@@ -60,7 +61,7 @@ function fixMaterial(mesh: THREE.Mesh): void {
     } else {
       m.side = THREE.FrontSide;
     }
-    if (/body/i.test(mesh.name)) m.roughness = 0.55;
+    if (/body/i.test(id)) m.roughness = 0.55;
     m.needsUpdate = true;
   }
 }
@@ -91,7 +92,7 @@ function stripRootMotion(clip: THREE.AnimationClip, pelvis: THREE.Bone): void {
 }
 
 /** A simple PBR one-handed sword, parented to the right hand bone. */
-export function createSword(): THREE.Group {
+export function createSword(scale = 1): THREE.Group {
   const steel = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 0.28 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x2a211b, roughness: 0.7 });
   const brass = new THREE.MeshStandardMaterial({ color: 0xb08d57, metalness: 1, roughness: 0.35 });
@@ -113,5 +114,6 @@ export function createSword(): THREE.Group {
   pommel.position.y = -0.065;
   sword.add(guard, grip, pommel);
   sword.traverse((o) => (o.castShadow = true));
+  sword.scale.setScalar(scale);
   return sword;
 }

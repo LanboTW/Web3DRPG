@@ -1,0 +1,7 @@
+{
+  "macros": { "gender": 1.0, "age": 0.9, "muscle": 0.0, "weight": 0.0, "height": 0.55, "proportions": 0.5 },
+  "skin": "old_caucasian_male",
+  "eyes": "low-poly",
+  "clothes": ["cortu_jeans_shorts"],
+  "animations": {"idle": "Sword_Idle", "walk": "Walk_Loop", "run": "Jog_Fwd_Loop", "attack": "Sword_Attack", "attack2": "Punch_Cross", "hit": "Hit_Chest", "death": "Death01"}
+}

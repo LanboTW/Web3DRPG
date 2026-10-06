@@ -8,14 +8,22 @@
     "height": 0.6,
     "cupsize": 0.45,
     "firmness": 0.6,
-    "race": { "caucasian": 0.7, "asian": 0.25, "african": 0.05 }
+    "race": {
+      "caucasian": 0.7,
+      "asian": 0.25,
+      "african": 0.05
+    }
   },
   "skin": "young_caucasian_female",
   "eyes": "low-poly",
   "eyebrows": "eyebrow010",
   "eyelashes": "eyelashes02",
   "hair": "ponytail01",
-  "clothes": ["toigo_bodice-style_top", "toigo_wool_pants", "culturalibre_heroine_boots_1"],
+  "clothes": [
+    "toigo_bodice-style_top",
+    "toigo_wool_pants",
+    "culturalibre_heroine_boots_1"
+  ],
   "animations": {
     "idle": "Idle_Loop",
     "walk": "Walk_Loop",
@@ -28,6 +36,7 @@
     "death": "Death01",
     "castEnter": "Spell_Simple_Enter",
     "cast": "Spell_Simple_Shoot",
-    "interact": "Interact"
+    "interact": "Interact",
+    "attack2": "Punch_Cross"
   }
 }

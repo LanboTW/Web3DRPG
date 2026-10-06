@@ -4,7 +4,7 @@ import { ColliderWorld } from './colliders';
 import { rng } from './noise';
 import {
   createTerrain, heightAt, normalAt, roadDistance, PLAY_HALF,
-  VILLAGE_CENTER, VILLAGE_RADIUS, RUINS_CENTER, RUINS_RADIUS,
+  VILLAGE_CENTER, VILLAGE_RADIUS, RUINS_CENTER, RUINS_RADIUS, BANDIT_CAMP, CAMP_RADIUS,
 } from './terrain';
 
 export const SUN_DIRECTION = new THREE.Vector3(-0.45, 0.75, 0.35).normalize();
@@ -66,6 +66,7 @@ export function createWorld(quality: QualitySettings, cameraFar: number): World 
 
   buildVillage(scene, colliders, cameraBlockers);
   buildRuins(scene, colliders, cameraBlockers);
+  buildCamp(scene, colliders, cameraBlockers);
   buildForest(scene, colliders, cameraBlockers, quality.vegetationDensity);
 
   return {
@@ -306,6 +307,65 @@ function buildRuins(scene: THREE.Scene, colliders: ColliderWorld, blockers: THRE
   colliders.add({ kind: 'box', x: rx, z: rz - 6, hw: 1.2, hd: 0.6, rot: 0 });
 }
 
+// ---------------------------------------------------------------- bandit camp
+function buildCamp(scene: THREE.Scene, colliders: ColliderWorld, blockers: THREE.Object3D[]): void {
+  const { x: cx, y: cz } = BANDIT_CAMP;
+  const canvas = new THREE.MeshStandardMaterial({ color: 0x8b7b5e, roughness: 0.95, side: THREE.DoubleSide });
+  const tents: [number, number, number][] = [[-7, 6, 0.6], [7, 7, -0.4], [0, -9, 3.1], [-9, -4, 1.8]];
+  for (const [ox, oz, rot] of tents) {
+    const tent = new THREE.Group();
+    const cloth = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 2.4, 2.6, 3, 1, true), canvas);
+    cloth.rotation.z = Math.PI / 2;
+    cloth.scale.set(1, 1.6, 1);
+    cloth.position.y = 1.15;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), timber);
+    pole.position.y = 1.3;
+    tent.add(cloth, pole);
+    const x = cx + ox;
+    const z = cz + oz;
+    place(tent, x, z, rot, 0.1);
+    scene.add(tent);
+    blockers.push(tent);
+    colliders.add({ kind: 'box', x, z, hw: 1.8, hd: 2.2, rot });
+  }
+  // Campfire: stone ring, logs and an emissive ember core with a warm point light.
+  const fire = new THREE.Group();
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22, 0), stone);
+    rock.position.set(Math.cos(a) * 0.75, 0.1, Math.sin(a) * 0.75);
+    fire.add(rock);
+  }
+  for (let i = 0; i < 3; i++) {
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1, 6), bark);
+    log.rotation.set(Math.PI / 2.6, (i / 3) * Math.PI * 2, 0);
+    log.position.y = 0.25;
+    fire.add(log);
+  }
+  const embers = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1), new THREE.MeshStandardMaterial({ color: 0x220800, emissive: 0xff6a1a, emissiveIntensity: 4 }));
+  embers.position.y = 0.25;
+  embers.scale.y = 0.6;
+  fire.add(embers);
+  const light = new THREE.PointLight(0xff8a3a, 30, 14, 2);
+  light.position.y = 1;
+  fire.add(light);
+  place(fire, cx, cz);
+  embers.castShadow = false;
+  scene.add(fire);
+  colliders.add({ kind: 'circle', x: cx, z: cz, r: 0.9 });
+  // Crates and a log bench.
+  const crateMat = new THREE.MeshStandardMaterial({ color: 0x6e5134, roughness: 0.85 });
+  const crates: [number, number][] = [[3, 3], [3.8, 3.6], [-3, -2.5]];
+  for (const [ox, oz] of crates) {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), crateMat);
+    crate.position.y = 0.45;
+    const g = new THREE.Group().add(crate);
+    place(g, cx + ox, cz + oz, Math.random());
+    scene.add(g);
+    colliders.add({ kind: 'circle', x: cx + ox, z: cz + oz, r: 0.6 });
+  }
+}
+
 // ---------------------------------------------------------------- forest
 function buildForest(scene: THREE.Scene, colliders: ColliderWorld, blockers: THREE.Object3D[], density: number): void {
   const rand = rng(1234);
@@ -317,6 +377,7 @@ function buildForest(scene: THREE.Scene, colliders: ColliderWorld, blockers: THR
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.y) < VILLAGE_RADIUS) return false;
     if (Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y) < RUINS_RADIUS - 6) return false;
     if (roadDistance(x, z) < clearRoad) return false;
+    if (Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y) < CAMP_RADIUS) return false;
     return true;
   };
   const randomSpot = (clearRoad: number, extent = PLAY_HALF + 25): [number, number] | null => {

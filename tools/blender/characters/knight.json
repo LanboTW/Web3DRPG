@@ -1,0 +1,7 @@
+{
+  "macros": { "gender": 1.0, "age": 0.5, "muscle": 1.0, "weight": 0.7, "height": 1.0, "proportions": 0.8 },
+  "skin": "middleage_caucasian_male",
+  "eyes": "low-poly",
+  "clothes": ["male_worksuit01", "culturalibre_hero_boots_3"],
+  "animations": {"idle": "Sword_Idle", "walk": "Walk_Loop", "run": "Jog_Fwd_Loop", "attack": "Sword_Attack", "attack2": "Punch_Cross", "hit": "Hit_Chest", "death": "Death01"}
+}

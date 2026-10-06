@@ -82,3 +82,60 @@ html, body {
 .tb[data-action="skill2"] { right: 30px; bottom: 100px; }
 .tb[data-action="ultimate"] { right: 155px; bottom: 125px; }
 .tb-small { width: 46px; height: 46px; right: 0; bottom: 166px; font-size: 12px; }
+
+/* ---------------------------------------------------------------- combat HUD */
+#player-bars {
+  position: absolute; left: max(14px, env(safe-area-inset-left)); top: max(30px, calc(env(safe-area-inset-top) + 22px));
+  width: min(260px, 46vw); display: flex; flex-direction: column; gap: 5px;
+}
+.bar { height: 10px; border-radius: 5px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.15); overflow: hidden; position: relative; }
+.bar > i { position: absolute; inset: 0; transform-origin: left; background: linear-gradient(90deg, #a0262a, #d8473f); transition: transform 0.15s; }
+.bar.ult { height: 6px; }
+.bar.ult > i { background: linear-gradient(90deg, #c5641a, #ffb23f); }
+.bar.ult.full { box-shadow: 0 0 8px #ffb23f; }
+.bar-label { font-size: 11px; color: var(--muted); text-shadow: 0 1px 2px #000; }
+
+#skillbar { position: absolute; left: 50%; bottom: max(40px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 10px; }
+.skill {
+  width: 54px; height: 54px; border-radius: 10px; background: rgba(10,10,12,0.55); border: 1px solid rgba(255,255,255,0.25);
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--text); overflow: hidden;
+}
+.skill b { position: absolute; left: 4px; top: 2px; font-size: 10px; color: var(--accent); }
+.skill::after, .tb::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(rgba(0,0,0,0.65) calc(var(--cd, 0) * 360deg), transparent 0);
+}
+.skill.ready-ult, .tb.ready-ult { box-shadow: 0 0 12px #ffb23f; border-color: #ffb23f; }
+
+#enemy-bars, #damage-numbers { position: absolute; inset: 0; overflow: hidden; }
+.ebar { position: absolute; width: 64px; height: 6px; margin-left: -32px; border-radius: 3px; background: rgba(0,0,0,0.55); overflow: hidden; }
+.ebar > i { position: absolute; inset: 0; transform-origin: left; background: #d8473f; }
+.ebar.telegraph { box-shadow: 0 0 6px 2px rgba(255, 90, 40, 0.9); }
+.dmg {
+  position: absolute; font-weight: 700; font-size: 18px; color: #fff; text-shadow: 0 1px 3px #000, 0 0 2px #000;
+  transform: translate(-50%, -50%); animation: dmg-rise 0.8s ease-out forwards; white-space: nowrap;
+}
+.dmg.crit { color: #ffd34d; font-size: 24px; }
+.dmg.taken { color: #ff6b5b; }
+@keyframes dmg-rise { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -46px; } }
+
+#lock-reticle {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px solid #ffd34d; border-radius: 50%;
+  box-shadow: 0 0 6px #ffd34d; display: none;
+}
+#boss-bar { position: absolute; left: 50%; top: max(14px, env(safe-area-inset-top)); transform: translateX(-50%); width: min(520px, 70vw); text-align: center; display: none; }
+#boss-bar .name { font-size: 14px; color: #e8d6b0; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000; margin-bottom: 4px; }
+#boss-bar .bar { height: 12px; }
+#boss-bar .bar > i { background: linear-gradient(90deg, #5a2a8a, #9b5ad8); }
+#death {
+  position: fixed; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(transparent, rgba(40, 0, 0, 0.75)); color: #e8c7b8; pointer-events: none;
+}
+#death .big { font-size: clamp(32px, 7vw, 64px); letter-spacing: 0.3em; }
+#banner {
+  position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); font-size: clamp(22px, 4.5vw, 40px);
+  color: #f0d79a; letter-spacing: 0.25em; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.6s; white-space: nowrap;
+}
+#banner.show { opacity: 1; }
+#stats { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); }

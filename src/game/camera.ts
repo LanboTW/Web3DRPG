@@ -38,9 +38,23 @@ export class ThirdPersonCamera {
     this.camera.updateProjectionMatrix();
   }
 
-  update(dt: number, input: Input, target: THREE.Vector3, eyeHeight: number, blockers: THREE.Object3D[]): void {
-    this.yaw -= input.look.x;
-    this.pitch = THREE.MathUtils.clamp(this.pitch + input.look.y, MIN_PITCH, MAX_PITCH);
+  /** Screen shake amplitude, decays on its own. */
+  shake = 0;
+
+  update(dt: number, input: Input, target: THREE.Vector3, eyeHeight: number, blockers: THREE.Object3D[], lockOn?: THREE.Vector3 | null): void {
+    if (lockOn) {
+      // Swing behind the player so both player and target stay in frame.
+      const want = Math.atan2(target.x - lockOn.x, target.z - lockOn.z);
+      let diff = want - this.yaw;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      this.yaw += diff * (1 - Math.exp(-6 * dt));
+      this.pitch = THREE.MathUtils.lerp(this.pitch, 0.28, 1 - Math.exp(-3 * dt));
+      this.lockOnPullback = THREE.MathUtils.lerp(this.lockOnPullback, 1.8, 1 - Math.exp(-4 * dt));
+    } else {
+      this.yaw -= input.look.x;
+      this.pitch = THREE.MathUtils.clamp(this.pitch + input.look.y, MIN_PITCH, MAX_PITCH);
+      this.lockOnPullback = THREE.MathUtils.lerp(this.lockOnPullback, 0, 1 - Math.exp(-4 * dt));
+    }
     if (input.zoom) this.distance = THREE.MathUtils.clamp(this.distance + input.zoom * 0.6, MIN_DIST, MAX_DIST);
 
     // Smooth focus so the camera doesn't jitter with footsteps.
@@ -70,6 +84,12 @@ export class ThirdPersonCamera {
     const ground = heightAt(cam.x, cam.z) + 0.4;
     if (cam.y < ground) cam.y = ground;
     this.camera.lookAt(this.focus);
+    if (this.shake > 0.001) {
+      const s = this.shake * 0.12;
+      this.camera.position.x += (Math.random() - 0.5) * s;
+      this.camera.position.y += (Math.random() - 0.5) * s;
+      this.shake *= Math.exp(-10 * dt);
+    }
   }
 
   snapTo(target: THREE.Vector3, eyeHeight: number): void {

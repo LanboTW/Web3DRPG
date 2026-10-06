@@ -11,6 +11,8 @@ export const VILLAGE_HEIGHT = 2;
 export const RUINS_CENTER = new THREE.Vector2(15, -115);
 export const RUINS_RADIUS = 36;
 export const RUINS_HEIGHT = 9;
+export const BANDIT_CAMP = new THREE.Vector2(72, -5);
+export const CAMP_RADIUS = 16;
 
 /** Main road from the village gate north to the ruins. */
 const ROAD: THREE.Vector2[] = [
@@ -55,6 +57,11 @@ export function heightAt(x: number, z: number): number {
   h = THREE.MathUtils.lerp(VILLAGE_HEIGHT + fbm(x * 0.05, z * 0.05, 2, 5) * 0.6, h, smoothstep(VILLAGE_RADIUS * 0.75, VILLAGE_RADIUS * 1.4, dv));
   const dr = Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y);
   h = THREE.MathUtils.lerp(RUINS_HEIGHT + fbm(x * 0.06, z * 0.06, 2, 9) * 0.8, h, smoothstep(RUINS_RADIUS * 0.7, RUINS_RADIUS * 1.5, dr));
+  const dc = Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y);
+  if (dc < CAMP_RADIUS * 1.6) {
+    const campH = naturalHeight(BANDIT_CAMP.x, BANDIT_CAMP.y);
+    h = THREE.MathUtils.lerp(campH, h, smoothstep(CAMP_RADIUS * 0.6, CAMP_RADIUS * 1.6, dc));
+  }
   // Roads cut a gentle, smoothed bed into the hills.
   const road = roadDistance(x, z);
   if (road < 9) {
@@ -96,6 +103,8 @@ export function createTerrain(segments: number): THREE.Mesh {
     c.lerp(DIRT, (1 - smoothstep(10, 16, dv)) * 0.7);
     const dr = Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y);
     c.lerp(STONE_FLOOR, (1 - smoothstep(14, 22, dr)) * 0.8);
+    const dc = Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y);
+    c.lerp(DIRT, (1 - smoothstep(6, 12, dc)) * 0.75);
     c.lerp(ROCK, smoothstep(0.12, 0.3, slope));
     // Subtle per-vertex brightness noise breaks up flat shading.
     c.multiplyScalar(0.85 + fbm(x * 0.2, z * 0.2, 2, 41) * 0.3);

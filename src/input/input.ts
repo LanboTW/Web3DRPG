@@ -142,9 +142,18 @@ export class Input {
       this.pointerLocked = document.pointerLockElement === canvas;
     });
     let dragging = false;
-    canvas.addEventListener('mousedown', () => (dragging = true));
-    window.addEventListener('mouseup', () => (dragging = false));
+    let dragDistance = 0;
+    canvas.addEventListener('mousedown', () => {
+      dragging = true;
+      dragDistance = 0;
+    });
+    window.addEventListener('mouseup', (e) => {
+      // Without pointer lock a plain click (no drag) attacks.
+      if (dragging && !this.pointerLocked && e.button === 0 && dragDistance < 6) this.pressed.add('attack');
+      dragging = false;
+    });
     document.addEventListener('mousemove', (e) => {
+      if (dragging) dragDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
       // Without pointer lock (e.g. inside an iframe) a held button drags the camera.
       if (!this.pointerLocked && !dragging) return;
       this.mouseDX += e.movementX;
