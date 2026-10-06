@@ -3,8 +3,9 @@ import { applyI18n, t } from './i18n';
 import { loadChoice, resolveQuality } from './engine/quality';
 import { backendName, createRenderer, DynamicResolution, webGPUAvailable } from './engine/renderer';
 import { Input } from './input/input';
-import { createWorld } from './game/world';
+import { createEnvironment, createWorld } from './game/world';
 import { Player } from './game/player';
+import { loadCharacter } from './game/character';
 import { ThirdPersonCamera } from './game/camera';
 import { VILLAGE_CENTER } from './game/terrain';
 import { hideLoading, nextFrame, setProgress, showError } from './ui/loading';
@@ -26,12 +27,14 @@ async function main(): Promise<void> {
   const cameraFar = quality.fogFar + 40;
   const t0 = performance.now();
   const world = createWorld(quality, cameraFar);
+  world.scene.environment = await createEnvironment(renderer);
+  world.scene.environmentIntensity = 0.8;
   console.info(`world built in ${Math.round(performance.now() - t0)} ms`);
 
-  setProgress(0.75, 'loading.player');
-  await nextFrame();
+  setProgress(0.45, 'loading.player');
+  const heroine = await loadCharacter('models/heroine.glb', (f) => setProgress(0.45 + f * 0.45, 'loading.player'));
   const input = new Input(renderer.domElement);
-  const player = new Player();
+  const player = new Player(heroine);
   player.spawn(VILLAGE_CENTER.x + 4, VILLAGE_CENTER.y - 8);
   world.scene.add(player.root);
   const cam = new ThirdPersonCamera(window.innerWidth / window.innerHeight, cameraFar);

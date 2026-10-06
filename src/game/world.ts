@@ -23,6 +23,21 @@ export interface World {
   follow(target: THREE.Vector3): void;
 }
 
+/** Image-based lighting from the sky gradient so metal and skin read correctly. */
+export async function createEnvironment(renderer: THREE.WebGPURenderer): Promise<THREE.Texture> {
+  const envScene = new THREE.Scene();
+  envScene.add(createSkyDome(50));
+  // Darker ground hemisphere for bounce light.
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color: 0x4d4a32 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -2;
+  envScene.add(ground);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const target = await pmrem.fromSceneAsync(envScene, 0.02, 0.1, 100);
+  pmrem.dispose();
+  return target.texture;
+}
+
 export function createWorld(quality: QualitySettings, cameraFar: number): World {
   const scene = new THREE.Scene();
   scene.background = FOG_COLOR.clone();
@@ -31,7 +46,7 @@ export function createWorld(quality: QualitySettings, cameraFar: number): World 
   const sky = createSkyDome(cameraFar * 0.9);
   scene.add(sky);
 
-  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x4a4030, 1.1);
+  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x4a4030, 0.45);
   scene.add(hemi);
 
   const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
