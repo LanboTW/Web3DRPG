@@ -5,6 +5,7 @@ import { loadChoice, resolveQuality } from './engine/quality';
 import { backendName, createRenderer, DynamicResolution, webGPUAvailable } from './engine/renderer';
 import { Input } from './input/input';
 import { createEnvironment, createWorld } from './game/world';
+import { createTerrainMaterial } from './game/terrainMaterial';
 import { Player } from './game/player';
 import { loadCharacter } from './game/character';
 import { ThirdPersonCamera } from './game/camera';
@@ -36,7 +37,8 @@ async function main(): Promise<void> {
   await nextFrame();
   const cameraFar = quality.fogFar + 40;
   const t0 = performance.now();
-  const world = createWorld(quality, cameraFar);
+  const terrainMat = await createTerrainMaterial(quality);
+  const world = createWorld(quality, cameraFar, terrainMat.material);
   world.scene.environment = await createEnvironment(renderer);
   world.scene.environmentIntensity = 0.8;
   console.info(`world built in ${Math.round(performance.now() - t0)} ms`);
@@ -45,8 +47,9 @@ async function main(): Promise<void> {
   // Load all character models in parallel; progress is the average.
   const names = ['heroine', 'bandit', 'skeleton', 'knight', 'chief', 'merchant', 'hunter'] as const;
   const fractions = names.map(() => 0);
+  const modelDir = { low: 'low/', medium: '', high: 'hd/' }[quality.tier];
   const [heroine, bandit, skeleton, knight, chiefModel, merchantModel, hunterModel] = await Promise.all(
-    names.map((n, i) => loadCharacter(`models/${n}.glb`, (f) => {
+    names.map((n, i) => loadCharacter(`models/${modelDir}${n}.glb`, (f) => {
       fractions[i] = f;
       setProgress(0.4 + (fractions.reduce((a, b) => a + b) / names.length) * 0.5, 'loading.player');
     })),
@@ -147,6 +150,8 @@ async function main(): Promise<void> {
 
   setProgress(1, 'loading.ready');
   hideLoading();
+  // High tier streams sharper ground textures after the game is playable.
+  terrainMat.upgrade().catch((e) => console.warn('texture upgrade failed', e));
 
   const lockPos = new THREE.Vector3();
   let last = performance.now();

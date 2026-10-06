@@ -76,43 +76,41 @@ export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE
   return out.set(heightAt(x - e, z) - heightAt(x + e, z), 2 * e, heightAt(x, z - e) - heightAt(x, z + e)).normalize();
 }
 
-const GRASS_A = new THREE.Color(0x3d5a1e);
-const GRASS_B = new THREE.Color(0x5b6e28);
-const DRY = new THREE.Color(0x7a7340);
-const DIRT = new THREE.Color(0x6b5236);
-const ROCK = new THREE.Color(0x6c6a64);
-const STONE_FLOOR = new THREE.Color(0x77736a);
-
-export function createTerrain(segments: number): THREE.Mesh {
+export function createTerrain(segments: number, material: THREE.Material): THREE.Mesh {
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, segments, segments);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
   geo.computeVertexNormals();
   const normals = geo.attributes.normal;
+  // Tint (vertex colour, ~0.625 = neutral) and splat weights (mud, rock, stone).
   const colors = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
+  const splat = new Float32Array(pos.count * 3);
+  const tint = new THREE.Color();
+  const dry = new THREE.Color(0.75, 0.68, 0.42);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const slope = 1 - normals.getY(i);
-    c.copy(GRASS_A).lerp(GRASS_B, fbm(x * 0.03, z * 0.03, 3, 21));
-    c.lerp(DRY, smoothstep(0.55, 0.8, fbm(x * 0.012, z * 0.012, 3, 31)) * 0.6);
-    c.lerp(DIRT, (1 - smoothstep(2, 4.5, roadDistance(x, z))) * 0.9);
     const dv = Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.y);
-    c.lerp(DIRT, (1 - smoothstep(10, 16, dv)) * 0.7);
     const dr = Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y);
-    c.lerp(STONE_FLOOR, (1 - smoothstep(14, 22, dr)) * 0.8);
     const dc = Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y);
-    c.lerp(DIRT, (1 - smoothstep(6, 12, dc)) * 0.75);
-    c.lerp(ROCK, smoothstep(0.12, 0.3, slope));
-    // Subtle per-vertex brightness noise breaks up flat shading.
-    c.multiplyScalar(0.85 + fbm(x * 0.2, z * 0.2, 2, 41) * 0.3);
-    colors.set([c.r, c.g, c.b], i * 3);
+    const mud = Math.max(
+      1 - smoothstep(2, 4.5, roadDistance(x, z)),
+      (1 - smoothstep(10, 16, dv)) * 0.8,
+      (1 - smoothstep(6, 12, dc)) * 0.85,
+      smoothstep(0.62, 0.8, fbm(x * 0.05, z * 0.05, 3, 51)) * 0.7,
+    );
+    const rock = smoothstep(0.1, 0.26, slope);
+    const stoneFloor = (1 - smoothstep(14, 22, dr)) * 0.9;
+    splat.set([mud, rock, stoneFloor], i * 3);
+    tint.setRGB(1, 1, 1).lerp(dry, smoothstep(0.55, 0.8, fbm(x * 0.012, z * 0.012, 3, 31)) * 0.5);
+    tint.multiplyScalar(0.625 * (0.85 + fbm(x * 0.08, z * 0.08, 2, 41) * 0.3));
+    colors.set([tint.r, tint.g, tint.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
-  const mesh = new THREE.Mesh(geo, mat);
+  geo.setAttribute('splat', new THREE.BufferAttribute(splat, 3));
+  const mesh = new THREE.Mesh(geo, material);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
   return mesh;

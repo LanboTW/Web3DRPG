@@ -38,7 +38,7 @@ export async function createEnvironment(renderer: THREE.WebGPURenderer): Promise
   return target.texture;
 }
 
-export function createWorld(quality: QualitySettings, cameraFar: number): World {
+export function createWorld(quality: QualitySettings, cameraFar: number, terrainMaterial: THREE.Material): World {
   const scene = new THREE.Scene();
   scene.background = FOG_COLOR.clone();
   scene.fog = new THREE.Fog(FOG_COLOR, quality.fogNear, quality.fogFar);
@@ -58,7 +58,7 @@ export function createWorld(quality: QualitySettings, cameraFar: number): World 
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
 
-  const terrain = createTerrain(quality.terrainSegments);
+  const terrain = createTerrain(quality.terrainSegments, terrainMaterial);
   scene.add(terrain);
 
   const colliders = new ColliderWorld();
