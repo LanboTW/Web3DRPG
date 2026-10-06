@@ -1,6 +1,6 @@
 import { isTouchDevice } from '../engine/quality';
 
-export type Action = 'attack' | 'dodge' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact';
+export type Action = 'attack' | 'dodge' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact' | 'potion' | 'menu';
 
 const KEY_ACTIONS: Record<string, Action> = {
   Space: 'dodge',
@@ -9,6 +9,9 @@ const KEY_ACTIONS: Record<string, Action> = {
   KeyR: 'ultimate',
   Tab: 'lock',
   KeyF: 'interact',
+  KeyH: 'potion',
+  KeyI: 'menu',
+  KeyM: 'menu',
 };
 
 // Standard Gamepad API mapping (Xbox layout names).
@@ -20,6 +23,8 @@ const PAD_ACTIONS: [number, Action][] = [
   [7, 'ultimate'], // RT
   [11, 'lock'], // R3
   [1, 'interact'], // B
+  [3, 'potion'], // Y
+  [9, 'menu'], // Start
 ];
 const PAD_SPRINT = 6; // LT
 const STICK_DEADZONE = 0.18;
@@ -120,6 +125,14 @@ export class Input {
     this.look.x = lx;
     this.look.y = ly;
     this.sprint = sprint;
+  }
+
+  /** Swallows this frame's gameplay input (dialogs and menus have focus). */
+  suppress(): void {
+    this.pressed.clear();
+    this.move.x = this.move.y = 0;
+    this.look.x = this.look.y = 0;
+    this.sprint = false;
   }
 
   endFrame(): void {

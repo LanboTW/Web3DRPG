@@ -1,0 +1,8 @@
+{
+  "macros": { "gender": 0.0, "age": 0.55, "muscle": 0.6, "weight": 0.45, "height": 0.55,
+    "race": { "african": 0.7, "caucasian": 0.2, "asian": 0.1 } },
+  "skin": "young_african_female",
+  "eyes": "low-poly", "eyebrows": "eyebrow011", "eyelashes": "eyelashes03", "hair": "elvs_french_braid_variation",
+  "clothes": ["toigo_fisherman_sweater", "cortu_cargo_pants", "culturalibre_heroine_boots_2"],
+  "animations": {"idle": "Idle_Loop", "talk": "Idle_Talking_Loop"}
+}

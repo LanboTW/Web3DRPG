@@ -33,7 +33,7 @@ export async function createEnvironment(renderer: THREE.WebGPURenderer): Promise
   ground.position.y = -2;
   envScene.add(ground);
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const target = await pmrem.fromSceneAsync(envScene, 0.02, 0.1, 100);
+  const target = pmrem.fromScene(envScene, 0.02, 0.1, 100);
   pmrem.dispose();
   return target.texture;
 }

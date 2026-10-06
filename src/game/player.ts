@@ -7,6 +7,7 @@ import { inArc, inRadius, rollDamage, type CombatEvents, type Combatant, type Hi
 import type { Enemy } from './enemy';
 import { heightAt, PLAY_HALF } from './terrain';
 import type { Vfx } from './vfx';
+import type { ItemDef } from '../rpg/items';
 
 const WALK_SPEED = 2.2;
 const RUN_SPEED = 4.6;
@@ -95,13 +96,70 @@ export class Player implements Combatant {
     this.animator = new Animator(model.root, model.clips);
     this.animator.play('idle', { fade: 0 });
 
-    const hand = model.bones.get('hand_r');
+    this.bones = model.bones;
+    model.root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const m = mesh.material as THREE.MeshStandardMaterial;
+      if (/bodice/i.test(`${mesh.name} ${m.name}`)) this.torsoMaterial = m;
+    });
+  }
+
+  private bones: Map<string, THREE.Bone>;
+  private sword: THREE.Object3D | null = null;
+  private torsoMaterial: THREE.MeshStandardMaterial | null = null;
+  private pauldrons: THREE.Object3D[] = [];
+
+  /** Applies combat stats from the RPG state, keeping the current HP ratio. */
+  setStats(stats: Stats): void {
+    const ratio = this.hp / this.stats.maxHp;
+    this.stats = stats;
+    this.hp = Math.max(1, Math.round(stats.maxHp * ratio));
+  }
+
+  heal(amount: number): void {
+    this.hp = Math.min(this.stats.maxHp, this.hp + amount);
+  }
+
+  /** Swaps the sword mesh and restyles the armor so gear is visible. */
+  setLook(weapon: ItemDef, armor: ItemDef): void {
+    const hand = this.bones.get('hand_r');
+    if (this.sword) this.sword.removeFromParent();
     if (hand) {
-      const sword = createSword();
+      this.sword = createSword(1, weapon.sword);
       // Hand bone axes: Y runs along the fingers. Rotate the blade out of the fist.
-      sword.rotation.set(0, 0, -Math.PI / 2);
-      sword.position.set(0.02, 0.09, 0.025);
-      hand.add(sword);
+      this.sword.rotation.set(0, 0, -Math.PI / 2);
+      this.sword.position.set(0.02, 0.09, 0.025);
+      hand.add(this.sword);
+    }
+    const look = armor.armor!;
+    if (this.torsoMaterial) {
+      this.torsoMaterial.color.set(look.torso);
+      this.torsoMaterial.metalness = look.metalness;
+      this.torsoMaterial.roughness = look.roughness;
+      this.torsoMaterial.emissive = new THREE.Color(look.trim ?? 0);
+      this.torsoMaterial.emissiveIntensity = look.trim ? 0.15 : 0;
+    }
+    this.pauldrons.forEach((p) => p.removeFromParent());
+    this.pauldrons = [];
+    if (look.pauldron !== undefined) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: look.pauldron, metalness: look.pauldronMetal ? 0.9 : 0, roughness: look.pauldronMetal ? 0.35 : 0.75,
+        emissive: new THREE.Color(look.trim ?? 0), emissiveIntensity: look.trim ? 0.4 : 0,
+      });
+      const geo = new THREE.SphereGeometry(0.105, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55);
+      for (const side of ['l', 'r']) {
+        const bone = this.bones.get(`upperarm_${side}`);
+        if (!bone) continue;
+        const p = new THREE.Mesh(geo, mat);
+        // Upper-arm bone Y runs down the arm; cap the shoulder end.
+        p.rotation.z = side === 'l' ? Math.PI / 2 : -Math.PI / 2;
+        p.position.set(0, 0.03, 0);
+        p.scale.set(1, 1.15, 1.25);
+        p.castShadow = true;
+        bone.add(p);
+        this.pauldrons.push(p);
+      }
     }
   }
 

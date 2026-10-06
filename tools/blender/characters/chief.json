@@ -1,0 +1,7 @@
+{
+  "macros": { "gender": 1.0, "age": 0.95, "muscle": 0.4, "weight": 0.55, "height": 0.45 },
+  "skin": "old_caucasian_male",
+  "eyes": "low-poly", "eyebrows": "eyebrow007", "eyelashes": "eyelashes01", "hair": "short04",
+  "clothes": ["male_casualsuit04", "shoes02"],
+  "animations": {"idle": "Idle_Loop", "talk": "Idle_Talking_Loop"}
+}

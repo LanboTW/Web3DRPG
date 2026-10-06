@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import type { SwordLook } from '../rpg/items';
 
 export interface CharacterModel {
   root: THREE.Object3D;
@@ -92,10 +93,15 @@ function stripRootMotion(clip: THREE.AnimationClip, pelvis: THREE.Bone): void {
 }
 
 /** A simple PBR one-handed sword, parented to the right hand bone. */
-export function createSword(scale = 1): THREE.Group {
-  const steel = new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 1, roughness: 0.28 });
+export function createSword(scale = 1, look?: SwordLook): THREE.Group {
+  const steel = new THREE.MeshStandardMaterial({ color: look?.blade ?? 0xd0d4d8, metalness: 1, roughness: 0.28 });
+  if (look?.emissive) {
+    steel.emissive = new THREE.Color(look.emissive);
+    steel.emissiveIntensity = 1.6;
+  }
   const dark = new THREE.MeshStandardMaterial({ color: 0x2a211b, roughness: 0.7 });
-  const brass = new THREE.MeshStandardMaterial({ color: 0xb08d57, metalness: 1, roughness: 0.35 });
+  const brass = new THREE.MeshStandardMaterial({ color: look?.guard ?? 0xb08d57, metalness: 1, roughness: 0.35 });
+  scale *= look?.scale ?? 1;
   const sword = new THREE.Group();
   const bladeShape = new THREE.Shape();
   bladeShape.moveTo(-0.022, 0);

@@ -33,8 +33,9 @@ export class EnemyManager {
   readonly list: Enemy[] = [];
   readonly group = new THREE.Group();
 
-  constructor(models: Record<EnemyKind, CharacterModel>) {
+  constructor(models: Record<EnemyKind, CharacterModel>, bossDefeated: boolean) {
     for (const [kind, x, z] of spawnTable()) {
+      if (kind === 'knight' && bossDefeated) continue;
       const e = new Enemy(ENEMY_DEFS[kind], models[kind], x, z);
       this.list.push(e);
       this.group.add(e.root);

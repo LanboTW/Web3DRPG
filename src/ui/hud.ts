@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import { saveChoice, type QualityChoice, type QualitySettings } from '../engine/quality';
 import type { Input } from '../input/input';
+import type { GameState } from '../rpg/state';
 
 export class Hud {
   private stats = document.getElementById('stats')!;
@@ -14,6 +15,7 @@ export class Hud {
     private quality: QualitySettings,
     private choice: QualityChoice,
     private backend: string,
+    private state: GameState,
   ) {
     document.getElementById('hud')!.hidden = false;
     if (input.touch) document.getElementById('touch')!.hidden = false;
@@ -50,7 +52,38 @@ export class Hud {
         .join('')}</div>
       <h3>${t('settings.controls')}</h3>
       <div class="help">${t(this.input.touch ? 'help.touch' : 'help.pc')}</div>
-      <div class="help">${t('help.gamepad')}</div>`;
+      <div class="help">${t('help.gamepad')}</div>
+      <h3>${t('settings.save')}</h3>
+      <div class="row">
+        <button data-save="export">${t('settings.export')}</button>
+        <button data-save="import">${t('settings.import')}</button>
+        <button data-save="reset">${t('settings.reset')}</button>
+      </div>`;
+    this.panel.querySelector('[data-save="export"]')!.addEventListener('click', () => {
+      const blob = new Blob([this.state.exportJson()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `web3drpg-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    this.panel.querySelector('[data-save="import"]')!.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json,.json';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        if (this.state.importJson(await file.text())) location.reload();
+        else alert(t('settings.importFail'));
+      };
+      input.click();
+    });
+    this.panel.querySelector('[data-save="reset"]')!.addEventListener('click', () => {
+      if (!confirm(t('settings.resetConfirm'))) return;
+      this.state.reset();
+      location.reload();
+    });
     this.panel.querySelectorAll<HTMLButtonElement>('[data-q]').forEach((btn) =>
       btn.addEventListener('click', () => {
         const choice = btn.dataset.q as QualityChoice;
