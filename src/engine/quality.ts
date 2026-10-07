@@ -14,20 +14,28 @@ export interface QualitySettings {
   fogFar: number;
   /** Frame-time target used by dynamic resolution. */
   targetFps: number;
+  /** Render no faster than this (phones: saves battery and heat). 0 = uncapped. */
+  frameCap: number;
+  /** Cascaded shadow maps (count); 0 = one shadow map that follows the player. */
+  cascades: number;
+  post: { ao: boolean; bloom: boolean; shafts: boolean };
 }
 
 const PRESETS: Record<QualityTier, Omit<QualitySettings, 'tier'>> = {
   low: {
     maxPixelRatio: 1.25, antialias: false, shadowMapSize: 1024, vegetationDensity: 0.45,
-    terrainSegments: 128, fogNear: 40, fogFar: 150, targetFps: 30,
+    terrainSegments: 128, fogNear: 40, fogFar: 150, targetFps: 30, frameCap: 30,
+    cascades: 0, post: { ao: false, bloom: false, shafts: false },
   },
   medium: {
     maxPixelRatio: 1.5, antialias: true, shadowMapSize: 2048, vegetationDensity: 0.7,
-    terrainSegments: 192, fogNear: 60, fogFar: 210, targetFps: 45,
+    terrainSegments: 192, fogNear: 60, fogFar: 210, targetFps: 45, frameCap: 0,
+    cascades: 3, post: { ao: false, bloom: true, shafts: false },
   },
   high: {
     maxPixelRatio: 2, antialias: true, shadowMapSize: 4096, vegetationDensity: 1,
-    terrainSegments: 256, fogNear: 80, fogFar: 280, targetFps: 60,
+    terrainSegments: 256, fogNear: 80, fogFar: 280, targetFps: 60, frameCap: 0,
+    cascades: 4, post: { ao: true, bloom: true, shafts: true },
   },
 };
 

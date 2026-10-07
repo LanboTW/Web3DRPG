@@ -1,16 +1,17 @@
 import * as THREE from 'three/webgpu';
+import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import type { QualitySettings } from '../engine/quality';
 import { ColliderWorld } from './colliders';
 import { rng } from './noise';
+import { SUN_DIRECTION, type Atmosphere } from './sky';
 import {
   createTerrain, heightAt, normalAt, roadDistance, PLAY_HALF,
   VILLAGE_CENTER, VILLAGE_RADIUS, RUINS_CENTER, RUINS_RADIUS, BANDIT_CAMP, CAMP_RADIUS,
 } from './terrain';
 
-export const SUN_DIRECTION = new THREE.Vector3(-0.45, 0.75, 0.35).normalize();
-const SKY_ZENITH = new THREE.Color(0x4a78b5);
-const SKY_HORIZON = new THREE.Color(0xc9d6df);
-const FOG_COLOR = new THREE.Color(0xb7c4cc);
+const SUN_GOLD = new THREE.Color(0xffc690);
+const SUN_COLD = new THREE.Color(0xb4c8e6);
+const ENV_INTENSITY = 1.5;
 
 export interface World {
   scene: THREE.Scene;
@@ -19,43 +20,34 @@ export interface World {
   /** Meshes the camera must not clip through. */
   cameraBlockers: THREE.Object3D[];
   terrain: THREE.Mesh;
-  /** Keeps the sky dome and sun shadow frustum centred on the player. */
-  follow(target: THREE.Vector3): void;
+  /** Keeps the sky dome and sun shadow centred on the player and blends the ruins' mist. */
+  follow(target: THREE.Vector3, dt: number): void;
 }
 
-/** Image-based lighting from the sky gradient so metal and skin read correctly. */
-export async function createEnvironment(renderer: THREE.WebGPURenderer): Promise<THREE.Texture> {
-  const envScene = new THREE.Scene();
-  envScene.add(createSkyDome(50));
-  // Darker ground hemisphere for bounce light.
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color: 0x4d4a32 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -2;
-  envScene.add(ground);
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const target = pmrem.fromScene(envScene, 0.02, 0.1, 100);
-  pmrem.dispose();
-  return target.texture;
-}
-
-export function createWorld(quality: QualitySettings, cameraFar: number, terrainMaterial: THREE.Material): World {
+export function createWorld(quality: QualitySettings, terrainMaterial: THREE.Material, atmosphere: Atmosphere, fogNode: THREE.Node): World {
   const scene = new THREE.Scene();
-  scene.background = FOG_COLOR.clone();
-  scene.fog = new THREE.Fog(FOG_COLOR, quality.fogNear, quality.fogFar);
-
-  const sky = createSkyDome(cameraFar * 0.9);
+  scene.fogNode = fogNode;
+  scene.environment = atmosphere.environment;
+  scene.environmentIntensity = ENV_INTENSITY;
+  const sky = atmosphere.dome;
   scene.add(sky);
 
-  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x4a4030, 0.45);
-  scene.add(hemi);
-
-  const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+  const sun = new THREE.DirectionalLight(SUN_GOLD, 3.4);
   sun.castShadow = true;
-  sun.shadow.mapSize.setScalar(quality.shadowMapSize);
-  const S = quality.tier === 'low' ? 22 : 34;
-  Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 160 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
+  if (quality.cascades > 0) {
+    // The cascades pick up the camera from the first render that uses them.
+    sun.shadow.mapSize.setScalar(2048);
+    Object.assign(sun.shadow.camera, { near: 1, far: 400 });
+    const csm = new CSMShadowNode(sun, { cascades: quality.cascades, maxFar: quality.fogFar * 0.8, mode: 'practical', lightMargin: 60 });
+    csm.fade = true;
+    sun.shadow.shadowNode = csm;
+  } else {
+    sun.shadow.mapSize.setScalar(quality.shadowMapSize);
+    const S = 22;
+    Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 160 });
+  }
   scene.add(sun, sun.target);
 
   const terrain = createTerrain(quality.terrainSegments, terrainMaterial);
@@ -69,38 +61,23 @@ export function createWorld(quality: QualitySettings, cameraFar: number, terrain
   buildCamp(scene, colliders, cameraBlockers);
   buildForest(scene, colliders, cameraBlockers, quality.vegetationDensity);
 
+  let mist = 0;
   return {
     scene, sun, colliders, cameraBlockers, terrain,
-    follow(target) {
+    follow(target, dt) {
       sky.position.copy(target);
-      sun.position.copy(target).addScaledVector(SUN_DIRECTION, 80);
+      sun.position.copy(target).addScaledVector(SUN_DIRECTION, 100);
       sun.target.position.copy(target);
+      // Cold mist hangs over the knight's ruins; ease in/out as the player walks.
+      const d = Math.hypot(target.x - RUINS_CENTER.x, target.z - RUINS_CENTER.y);
+      const goal = 1 - THREE.MathUtils.smoothstep(d, RUINS_RADIUS - 6, RUINS_RADIUS + 45);
+      mist += (goal - mist) * Math.min(1, dt * 1.5);
+      atmosphere.mist.value = mist;
+      sun.color.copy(SUN_GOLD).lerp(SUN_COLD, mist);
+      sun.intensity = THREE.MathUtils.lerp(3.4, 1.3, mist);
+      scene.environmentIntensity = THREE.MathUtils.lerp(ENV_INTENSITY, ENV_INTENSITY * 0.7, mist);
     },
   };
-}
-
-function createSkyDome(radius: number): THREE.Mesh {
-  const geo = new THREE.SphereGeometry(radius, 32, 16);
-  const pos = geo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
-  const dir = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    dir.fromBufferAttribute(pos, i).normalize();
-    const up = Math.max(0, dir.y);
-    c.copy(SKY_HORIZON).lerp(SKY_ZENITH, Math.pow(up, 0.55));
-    // Warm glow toward the sun.
-    const sunAmount = Math.pow(Math.max(0, dir.dot(SUN_DIRECTION)), 8);
-    c.lerp(new THREE.Color(0xfff0d0), sunAmount * 0.6);
-    if (dir.y < 0) c.copy(FOG_COLOR);
-    colors.set([c.r, c.g, c.b], i * 3);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = -1;
-  mesh.frustumCulled = false;
-  return mesh;
 }
 
 // ---------------------------------------------------------------- materials

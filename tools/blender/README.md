@@ -36,3 +36,14 @@ world X elsewhere) and then follows the source bone's world-space rotation.
 
 `tools/contact-sheet.mjs` stitches frame renders into labelled sheets for reviewing
 clips by eye.
+
+## Sky
+`public/textures/sky/` holds the Poly Haven HDRI `table_mountain_1_puresky` (CC0): the 1k
+`.hdr` as `env.hdr` (image-based lighting and fog colour) and JPEG strips of the upper
+hemisphere for the background. The strips are Reinhard-encoded (`c / (1 + c)`) so the game
+decodes them back to linear HDR and tone maps them with the rest of the frame:
+```bash
+blender -b --factory-startup --python tools/blender/bake_sky.py -- <8k.hdr> <out.raw> 1
+```
+then resize the raw RGB strip (8192 × 2129) to 8192/4096/2048-wide JPEGs (`sky_hd`, `sky`,
+`sky_low`) with sharp. The script also prints the sun direction used in `src/game/sky.ts`.

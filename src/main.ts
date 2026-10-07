@@ -4,7 +4,9 @@ import { applyI18n, t } from './i18n';
 import { loadChoice, resolveQuality } from './engine/quality';
 import { backendName, createRenderer, DynamicResolution, webGPUAvailable } from './engine/renderer';
 import { Input } from './input/input';
-import { createEnvironment, createWorld } from './game/world';
+import { createWorld } from './game/world';
+import { createAtmosphere, SKY_SUN } from './game/sky';
+import { PostStack } from './engine/post';
 import { createTerrainMaterial } from './game/terrainMaterial';
 import { Player } from './game/player';
 import { loadCharacter } from './game/character';
@@ -38,9 +40,8 @@ async function main(): Promise<void> {
   const cameraFar = quality.fogFar + 40;
   const t0 = performance.now();
   const terrainMat = await createTerrainMaterial(quality);
-  const world = createWorld(quality, cameraFar, terrainMat.material);
-  world.scene.environment = await createEnvironment(renderer);
-  world.scene.environmentIntensity = 0.8;
+  const { atmosphere, fogNode } = await createAtmosphere(quality, cameraFar * 0.9, quality.fogFar);
+  const world = createWorld(quality, terrainMat.material, atmosphere, fogNode);
   console.info(`world built in ${Math.round(performance.now() - t0)} ms`);
 
   setProgress(0.4, 'loading.player');
@@ -96,12 +97,16 @@ async function main(): Promise<void> {
   player.spawn(spawnAt[0], spawnAt[1]);
   world.scene.add(player.root);
   const cam = new ThirdPersonCamera(window.innerWidth / window.innerHeight, cameraFar);
-  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { cam });
+  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { cam, world });
+  const post = new PostStack(renderer, world.scene, cam.camera, quality, SKY_SUN);
+  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { post, atmosphere });
   cam.yaw = player.facing + Math.PI;
   cam.snapTo(player.position, player.eyeHeight);
 
   // Compile shaders before revealing the scene to avoid first-frame hitches.
-  await renderer.compileAsync(world.scene, cam.camera);
+  // WebGL compiles in parallel and polls for completion; never let a stalled
+  // poll (throttled background tab) hold the loading screen forever.
+  await Promise.race([renderer.compileAsync(world.scene, cam.camera), new Promise((r) => setTimeout(r, 8000))]);
 
   const dynRes = new DynamicResolution(renderer, quality);
   const hud = new Hud(input, quality, choice, backend, state);
@@ -173,8 +178,11 @@ async function main(): Promise<void> {
 
   const lockPos = new THREE.Vector3();
   let last = performance.now();
+  const minFrameMs = quality.frameCap ? 1000 / quality.frameCap - 2 : 0;
   renderer.setAnimationLoop(() => {
     const now = performance.now();
+    // Phones render at 30 fps: skip display refreshes that come too soon.
+    if (now - last < minFrameMs) return;
     // Clamp so a background tab doesn't teleport the player on return.
     const realDt = Math.min(0.05, (now - last) / 1000);
     last = now;
@@ -218,7 +226,7 @@ async function main(): Promise<void> {
     vfx.update(worldDt);
     const lock = player.lockTarget ? player.lockTarget.chest(lockPos) : null;
     cam.update(realDt, input, player.position, player.eyeHeight, world.cameraBlockers, lock);
-    world.follow(player.position);
+    world.follow(player.position, realDt);
     input.endFrame();
 
     if (!player.alive) {
@@ -233,7 +241,7 @@ async function main(): Promise<void> {
     combatHud.update(player, enemies.list, enemies.boss);
     ui.updateTags(npcs, cam.camera, player.position, questOf);
 
-    renderer.render(world.scene, cam.camera);
+    post.render();
     dynRes.update(dt);
     hud.update(dt, dynRes.scale);
   });
