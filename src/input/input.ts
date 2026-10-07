@@ -1,6 +1,6 @@
 import { isTouchDevice } from '../engine/quality';
 
-export type Action = 'attack' | 'dodge' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact' | 'potion' | 'menu';
+export type Action = 'attack' | 'dodge' | 'block' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact' | 'potion' | 'menu';
 
 const KEY_ACTIONS: Record<string, Action> = {
   Space: 'dodge',
@@ -18,15 +18,19 @@ const KEY_ACTIONS: Record<string, Action> = {
 const PAD_ACTIONS: [number, Action][] = [
   [2, 'attack'], // X
   [0, 'dodge'], // A
-  [4, 'skill1'], // LB
-  [5, 'skill2'], // RB
-  [7, 'ultimate'], // RT
+  [5, 'skill1'], // RB
+  [7, 'skill2'], // RT
+  [3, 'ultimate'], // Y
   [11, 'lock'], // R3
   [1, 'interact'], // B
-  [3, 'potion'], // Y
+  [12, 'potion'], // D-pad up
   [9, 'menu'], // Start
 ];
-const PAD_SPRINT = 6; // LT
+const PAD_BLOCK = 4; // LB (held)
+const PAD_SPRINT_HOLD = 6; // LT (held)
+const PAD_SPRINT_TOGGLE = 10; // L3: sprint until the stick is released
+/** Keyboard alternative to right mouse for blocking (trackpads). */
+const KEY_BLOCK = 'KeyC';
 const STICK_DEADZONE = 0.18;
 const JOY_RADIUS = 50;
 
@@ -42,6 +46,8 @@ export class Input {
   readonly look = { x: 0, y: 0 };
   zoom = 0;
   sprint = false;
+  /** Held: raising the shield. */
+  block = false;
   pointerLocked = false;
   readonly touch = isTouchDevice();
 
@@ -55,6 +61,9 @@ export class Input {
   private joyOrigin = { x: 0, y: 0 };
   private lookId: number | null = null;
   private lookLast = { x: 0, y: 0 };
+  private mouseBlock = false;
+  private touchBlock = false;
+  private padSprintToggle = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
@@ -65,7 +74,10 @@ export class Input {
       if (action) this.pressed.add(action);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.mouseBlock = this.touchBlock = false;
+    });
 
     if (this.touch) this.bindTouch();
     else this.bindMouse();
@@ -88,6 +100,7 @@ export class Input {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) mx += 1;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) mx -= 1;
     let sprint = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    let block = this.keys.has(KEY_BLOCK) || this.mouseBlock || this.touchBlock;
 
     mx += this.touchMove.x;
     my += this.touchMove.y;
@@ -107,7 +120,10 @@ export class Input {
       const PAD_LOOK = 2.6;
       lx += rx * PAD_LOOK * dt;
       ly += ry * PAD_LOOK * dt;
-      if (pad.buttons[PAD_SPRINT]?.pressed) sprint = true;
+      if (pad.buttons[PAD_SPRINT_TOGGLE]?.pressed) this.padSprintToggle = true;
+      if (Math.hypot(ax, ay) < 0.2) this.padSprintToggle = false;
+      if (pad.buttons[PAD_SPRINT_HOLD]?.pressed || this.padSprintToggle) sprint = true;
+      if (pad.buttons[PAD_BLOCK]?.pressed) block = true;
       PAD_ACTIONS.forEach(([index, action]) => {
         const down = pad.buttons[index]?.pressed ?? false;
         if (down && !this.padPrev[index]) this.pressed.add(action);
@@ -125,6 +141,7 @@ export class Input {
     this.look.x = lx;
     this.look.y = ly;
     this.sprint = sprint;
+    this.block = block;
   }
 
   /** Swallows this frame's gameplay input (dialogs and menus have focus). */
@@ -133,6 +150,7 @@ export class Input {
     this.move.x = this.move.y = 0;
     this.look.x = this.look.y = 0;
     this.sprint = false;
+    this.block = false;
   }
 
   endFrame(): void {
@@ -156,11 +174,17 @@ export class Input {
     });
     let dragging = false;
     let dragDistance = 0;
-    canvas.addEventListener('mousedown', () => {
+    canvas.addEventListener('mousedown', (e) => {
+      // Right button raises the shield; only the left button drags the camera.
+      if (e.button === 2) {
+        this.mouseBlock = true;
+        return;
+      }
       dragging = true;
       dragDistance = 0;
     });
     window.addEventListener('mouseup', (e) => {
+      if (e.button === 2) this.mouseBlock = false;
       // Without pointer lock a plain click (no drag) attacks.
       if (dragging && !this.pointerLocked && e.button === 0 && dragDistance < 6) this.pressed.add('attack');
       dragging = false;
@@ -251,12 +275,18 @@ export class Input {
 
     document.querySelectorAll<HTMLButtonElement>('#touch-buttons .tb').forEach((btn) => {
       const action = btn.dataset.action as Action;
+      // The block button is held rather than tapped.
+      const hold = btn.dataset.hold === 'block';
       btn.addEventListener('touchstart', (e) => {
         e.preventDefault();
         btn.classList.add('pressed');
-        this.press(action);
+        if (hold) this.touchBlock = true;
+        else this.press(action);
       }, { passive: false });
-      const release = () => btn.classList.remove('pressed');
+      const release = () => {
+        btn.classList.remove('pressed');
+        if (hold) this.touchBlock = false;
+      };
       btn.addEventListener('touchend', release);
       btn.addEventListener('touchcancel', release);
     });

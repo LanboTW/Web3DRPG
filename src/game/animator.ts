@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-const ONE_SHOTS = new Set(['roll', 'attack', 'attack2', 'hit', 'death', 'castEnter', 'cast', 'interact']);
+const ONE_SHOTS = new Set(['roll', 'attack', 'attack2', 'attack3', 'whirl', 'thrust', 'slam', 'block', 'blockHit', 'hit', 'death', 'castEnter', 'cast', 'interact']);
 
 /** Thin cross-fading wrapper around AnimationMixer. */
 export class Animator {

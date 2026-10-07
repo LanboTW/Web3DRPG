@@ -62,15 +62,17 @@ async function main(): Promise<void> {
   const vfx = new Vfx(world.scene);
   const input = new Input(renderer.domElement);
   const player = new Player(heroine);
+  // Dev-only handle for inspecting the scene from the browser console.
+  if (import.meta.env.DEV) Object.assign(window, { __game: { player, enemies, input } });
   const applyGear = () => {
     player.setStats(state.stats());
-    player.setLook(ITEMS[state.data.equipped.weapon], ITEMS[state.data.equipped.armor]);
+    player.setLook(ITEMS[state.data.equipped.weapon], ITEMS[state.data.equipped.armor], ITEMS[state.data.equipped.shield]);
   };
   applyGear();
   player.hp = player.stats.maxHp;
   let gearKey = '';
   state.onChange(() => {
-    const key = `${state.data.equipped.weapon}|${state.data.equipped.armor}|${state.data.level}|${JSON.stringify(state.data.attrs)}`;
+    const key = `${state.data.equipped.weapon}|${state.data.equipped.armor}|${state.data.equipped.shield}|${state.data.level}|${JSON.stringify(state.data.attrs)}`;
     if (key !== gearKey) {
       gearKey = key;
       applyGear();
@@ -94,6 +96,7 @@ async function main(): Promise<void> {
   player.spawn(spawnAt[0], spawnAt[1]);
   world.scene.add(player.root);
   const cam = new ThirdPersonCamera(window.innerWidth / window.innerHeight, cameraFar);
+  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { cam });
   cam.yaw = player.facing + Math.PI;
   cam.snapTo(player.position, player.eyeHeight);
 
@@ -136,6 +139,21 @@ async function main(): Promise<void> {
     if (def.boss) {
       combatHud.showBanner(t('hud.bossDefeated'), 4);
       state.addItem('knight_plate');
+      state.addItem('knight_shield');
+    }
+  };
+  player.onGuard = (result, at) => {
+    if (result === 'parry') {
+      vfx.spark(at, 0xbfe8ff, 14);
+      vfx.ring(at.clone().setY(player.position.y + 0.05), 1.6, 0x9fd8ff, 0.35);
+      events.hitStop(0.14);
+      events.shake(0.3);
+    } else if (result === 'block') {
+      vfx.spark(at, 0xffd27a, 5);
+      events.shake(0.15);
+    } else {
+      vfx.spark(at, 0xff6040, 10);
+      events.shake(0.45);
     }
   };
   let deadTime = 0;

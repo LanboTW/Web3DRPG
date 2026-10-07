@@ -1,8 +1,39 @@
 {
-  "macros": { "gender": 1.0, "age": 0.55, "muscle": 0.6, "weight": 0.6, "height": 0.55, "proportions": 0.5,
-    "race": { "caucasian": 0.6, "asian": 0.2, "african": 0.2 } },
+  "macros": {
+    "gender": 1,
+    "age": 0.55,
+    "muscle": 0.6,
+    "weight": 0.6,
+    "height": 0.55,
+    "proportions": 0.5,
+    "race": {
+      "caucasian": 0.6,
+      "asian": 0.2,
+      "african": 0.2
+    }
+  },
   "skin": "middleage_caucasian_male",
-  "eyes": "low-poly", "eyebrows": "eyebrow004", "eyelashes": "eyelashes01", "hair": "short02",
-  "clothes": ["toigo_fisherman_sweater", "cortu_cargo_pants", "culturalibre_male_boots"],
-  "animations": {"idle": "Sword_Idle", "walk": "Walk_Loop", "run": "Jog_Fwd_Loop", "attack": "Sword_Attack", "attack2": "Punch_Cross", "hit": "Hit_Chest", "death": "Death01"}
+  "eyes": "low-poly",
+  "eyebrows": "eyebrow004",
+  "eyelashes": "eyelashes01",
+  "hair": "short02",
+  "clothes": [
+    "toigo_fisherman_sweater",
+    "cortu_cargo_pants",
+    "culturalibre_male_boots"
+  ],
+  "animations": {
+    "idle": "mixamo:sword and shield idle",
+    "walk": "mixamo:sword and shield walk",
+    "run": "mixamo:sword and shield run",
+    "attack": "mixamo:sword and shield slash",
+    "attack2": "mixamo:sword and shield attack (4)",
+    "hit": "mixamo:sword and shield impact (3)",
+    "death": "mixamo:sword and shield death (2)"
+  },
+  "gripFrom": "idle",
+  "gripHands": [
+    "l",
+    "r"
+  ]
 }

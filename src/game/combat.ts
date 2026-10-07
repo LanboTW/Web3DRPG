@@ -25,6 +25,8 @@ export interface HitInfo {
   /** Knockback strength in m/s. */
   knockback: number;
   heavy: boolean;
+  /** The attacker, so a perfect parry can stagger it. */
+  attacker?: { parried(): void };
 }
 
 export function rollDamage(attacker: Stats, defender: Stats, multiplier: number): { amount: number; crit: boolean } {

@@ -1,4 +1,4 @@
-export type ItemKind = 'weapon' | 'armor' | 'consumable';
+export type ItemKind = 'weapon' | 'armor' | 'shield' | 'consumable';
 
 export interface SwordLook {
   blade: number;
@@ -18,6 +18,17 @@ export interface ArmorLook {
   trim?: number;
 }
 
+export interface ShieldLook {
+  /** Face color and rim color. */
+  face: number;
+  rim: number;
+  metal: boolean;
+  /** Optional emblem/boss color. */
+  boss?: number;
+  emissive?: number;
+  radius: number;
+}
+
 export interface ItemDef {
   id: string;
   kind: ItemKind;
@@ -32,6 +43,10 @@ export interface ItemDef {
   heal?: number;
   sword?: SwordLook;
   armor?: ArmorLook;
+  /** Shields: fraction of damage stopped by a block and stamina cost per point blocked. */
+  guard?: number;
+  staminaCost?: number;
+  shield?: ShieldLook;
 }
 
 export const ITEMS: Record<string, ItemDef> = {
@@ -62,6 +77,18 @@ export const ITEMS: Record<string, ItemDef> = {
   knight_plate: {
     id: 'knight_plate', kind: 'armor', name: '亡靈騎士鎧', desc: '從亡靈騎士身上取下的黑鎧，仍透著寒氣。', price: 0, def: 15, hp: 45,
     armor: { torso: 0x2c2f36, metalness: 0.9, roughness: 0.3, pauldron: 0x24262c, pauldronMetal: true, trim: 0x5ad1ff },
+  },
+  wood_shield: {
+    id: 'wood_shield', kind: 'shield', name: '橡木圓盾', desc: '以鐵釘加固的橡木盾。', price: 15, guard: 0.6, staminaCost: 1.6,
+    shield: { face: 0x8a5a32, rim: 0x5c5f63, metal: false, boss: 0x8a8f96, radius: 0.3 },
+  },
+  iron_shield: {
+    id: 'iron_shield', kind: 'shield', name: '鐵製圓盾', desc: '厚實的鐵盾，能擋下大半衝擊。', price: 220, guard: 0.8, staminaCost: 1.1, def: 2,
+    shield: { face: 0x8d949c, rim: 0xb08d57, metal: true, boss: 0xb08d57, radius: 0.33 },
+  },
+  knight_shield: {
+    id: 'knight_shield', kind: 'shield', name: '亡靈騎士盾', desc: '刻著冰藍符文的黑盾，幾乎無法擊穿。', price: 0, guard: 0.92, staminaCost: 0.7, def: 4,
+    shield: { face: 0x24262c, rim: 0x3a3e46, metal: true, boss: 0x5ad1ff, emissive: 0x5ad1ff, radius: 0.36 },
   },
   potion: { id: 'potion', kind: 'consumable', name: '治療藥水', desc: '恢復 60 點生命。', price: 15, heal: 60 },
   hi_potion: { id: 'hi_potion', kind: 'consumable', name: '高級藥水', desc: '恢復 150 點生命。', price: 45, heal: 150 },

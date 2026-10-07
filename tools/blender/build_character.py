@@ -2,11 +2,12 @@
 Builds a game-ready character with MPFB2 inside headless Blender and exports glTF.
 
 Usage:
-  blender -b --factory-startup -P tools/blender/build_character.py -- <character.json> <out.glb> <ual.glb>
+  blender -b --factory-startup -P tools/blender/build_character.py -- <character.json> <out.glb> <ual.glb> [mixamo dir]
 
 The character JSON describes body macros, skin, hair and clothes by MakeHuman
-asset name. Animations come from the Quaternius Universal Animation Library and
-are retargeted onto MPFB's "game_engine" rig, whose bone names match UAL's.
+asset name. Animations come from the Quaternius Universal Animation Library
+("UAL_Name") or from Mixamo FBX downloads ("mixamo:<file stem>[@start-end]") and
+are retargeted onto MPFB's "game_engine" rig.
 """
 import json
 import math
@@ -15,7 +16,7 @@ import sys
 
 import addon_utils
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 addon_utils.enable('bl_ext.user_default.mpfb', default_set=True)
 from bl_ext.user_default.mpfb.services.humanservice import HumanService  # noqa: E402
@@ -24,6 +25,7 @@ from bl_ext.user_default.mpfb.services.objectservice import ObjectService  # noq
 
 argv = sys.argv[sys.argv.index('--') + 1:]
 CONFIG_PATH, OUT_PATH, UAL_PATH = argv[0], argv[1], argv[2]
+MIXAMO_DIR = argv[3] if len(argv) > 3 else ""
 with open(CONFIG_PATH, encoding='utf-8') as f:
     CFG = json.load(f)
 
@@ -83,24 +85,137 @@ for name in CFG.get('clothes', []):
     log('added clothes', name)
 
 # ------------------------------------------------------------------ retarget
-before = set(bpy.data.objects)
-bpy.ops.import_scene.gltf(filepath=UAL_PATH)
-src_rig = next(o for o in set(bpy.data.objects) - before if o.type == 'ARMATURE')
-src_objs = set(bpy.data.objects) - before
-log('UAL rig', src_rig.name, 'actions', len(bpy.data.actions))
+# Sources are T-posed (UAL, Mixamo) while MPFB rests in an A-pose with bent
+# forearms. Each target bone is therefore first aligned to the source's rest
+# frame (bone direction + a reference axis), then driven by the source bone's
+# world-space rotation:
+#   dst_world = src_world @ src_rest^-1 @ align @ dst_rest
+scene = bpy.context.scene
+scene.render.fps = 30  # Mixamo is 30 fps; glTF clips are imported in seconds.
 
-src_names = {b.name.lower(): b.name for b in src_rig.data.bones}
-mapping = {b.name: src_names[b.name.lower()] for b in rig.data.bones if b.name.lower() in src_names}
-log('mapped bones', len(mapping), 'of', len(rig.data.bones))
+SIDES = (('l', 'Left'), ('r', 'Right'))
+FINGERS = ('thumb', 'index', 'middle', 'ring', 'pinky')
+MIXAMO_MAP = {'pelvis': 'Hips', 'spine_01': 'Spine', 'spine_02': 'Spine1', 'spine_03': 'Spine2', 'neck_01': 'Neck', 'head': 'Head'}
+for s, S in SIDES:
+    MIXAMO_MAP.update({f'clavicle_{s}': f'{S}Shoulder', f'upperarm_{s}': f'{S}Arm', f'lowerarm_{s}': f'{S}ForeArm',
+                       f'hand_{s}': f'{S}Hand', f'thigh_{s}': f'{S}UpLeg', f'calf_{s}': f'{S}Leg',
+                       f'foot_{s}': f'{S}Foot', f'ball_{s}': f'{S}ToeBase'})
+    for f in FINGERS:
+        for i in (1, 2, 3):
+            MIXAMO_MAP[f'{f}_0{i}_{s}'] = f'{S}Hand{f.capitalize()}{i}'
+MIXAMO_MAP = {k: 'mixamorig:' + v for k, v in MIXAMO_MAP.items()}
 
-# Scale: compare pelvis heights at rest so root motion translates sensibly.
+# The bone whose head each bone points at (canonical MPFB names).
+NEXT = {'spine_01': 'spine_02', 'spine_02': 'spine_03', 'spine_03': 'neck_01', 'neck_01': 'head'}
+for s, _ in SIDES:
+    NEXT.update({f'clavicle_{s}': f'upperarm_{s}', f'upperarm_{s}': f'lowerarm_{s}', f'lowerarm_{s}': f'hand_{s}',
+                 f'hand_{s}': f'middle_01_{s}', f'thigh_{s}': f'calf_{s}', f'calf_{s}': f'foot_{s}', f'foot_{s}': f'ball_{s}'})
+    for f in FINGERS:
+        NEXT[f'{f}_01_{s}'] = f'{f}_02_{s}'
+        NEXT[f'{f}_02_{s}'] = f'{f}_03_{s}'
+NO_ALIGN = {'Root', 'pelvis'}
+FINGER_BONES = {f'{f}_0{i}_{s}' for f in FINGERS for i in (1, 2, 3) for s, _ in SIDES}
+
+
 def rest_world(arm, bone_name):
     return arm.matrix_world @ arm.data.bones[bone_name].matrix_local
 
-src_pelvis_h = rest_world(src_rig, mapping['pelvis']).translation.z
-dst_pelvis_h = rest_world(rig, 'pelvis').translation.z
-height_ratio = dst_pelvis_h / src_pelvis_h
-log('pelvis heights', round(src_pelvis_h, 3), round(dst_pelvis_h, 3))
+
+def rot3(m):
+    return m.to_3x3().normalized()
+
+
+def frame(primary, secondary):
+    y = primary.normalized()
+    x = (secondary - y * secondary.dot(y)).normalized()
+    z = x.cross(y)
+    return Matrix((x, y, z)).transposed()
+
+
+class Source:
+    """A source armature plus the per-bone offsets that map it onto `rig`."""
+
+    def __init__(self, arm, mapping):
+        self.arm = arm
+        self.map = {d: s for d, s in mapping.items() if s in arm.data.bones and d in rig.data.bones}
+        heads = {d: rest_world(arm, s).translation for d, s in self.map.items()}
+        dst_heads = {b.name: rest_world(rig, b.name).translation for b in rig.data.bones}
+
+        def axes(name, arm_, bone, hd):
+            nxt = NEXT.get(name)
+            primary = (hd[nxt] - hd[name]) if nxt in hd else rot3(rest_world(arm_, bone)).col[1]
+            side = name[-1] if name[-2:] in ('_l', '_r') else None
+            arm_chain = side and not name.startswith(('thigh', 'calf', 'foot', 'ball'))
+            if arm_chain and f'index_01_{side}' in hd and f'pinky_01_{side}' in hd:
+                secondary = hd[f'pinky_01_{side}'] - hd[f'index_01_{side}']
+            else:
+                secondary = Vector((1, 0, 0))
+            return frame(primary, secondary)
+
+        self.offset = {}
+        for d, s in self.map.items():
+            src_rest = rot3(rest_world(arm, s))
+            dst_rest = rot3(rest_world(rig, d))
+            if d in NO_ALIGN:
+                align = Matrix.Identity(3)
+            else:
+                align = axes(d, arm, s, heads) @ axes(d, rig, d, dst_heads).transposed()
+            self.offset[d] = (src_rest.inverted() @ align @ dst_rest).to_quaternion()
+        src_pelvis = rest_world(arm, self.map['pelvis']).translation.z
+        self.height_ratio = rest_world(rig, 'pelvis').translation.z / src_pelvis
+        arm.animation_data_create()
+        log('source', arm.name, 'mapped', len(self.map), 'of', len(rig.data.bones), 'height ratio', round(self.height_ratio, 3))
+
+    def use(self, action):
+        self.arm.animation_data.action = action
+        if hasattr(action, 'slots') and len(action.slots):
+            self.arm.animation_data.action_slot = action.slots[0]
+
+
+def import_objects(op, **kw):
+    before_o, before_a = set(bpy.data.objects), set(bpy.data.actions)
+    op(**kw)
+    return set(bpy.data.objects) - before_o, set(bpy.data.actions) - before_a
+
+
+temp_objs = set()
+sources = {}
+
+# UAL: one glTF holding every clip; bone names match MPFB's case-insensitively.
+objs, _ = import_objects(bpy.ops.import_scene.gltf, filepath=UAL_PATH)
+temp_objs |= objs
+ual_rig = next(o for o in objs if o.type == 'ARMATURE')
+ual_names = {b.name.lower(): b.name for b in ual_rig.data.bones}
+sources['ual'] = Source(ual_rig, {b.name: ual_names[b.name.lower()] for b in rig.data.bones if b.name.lower() in ual_names})
+ual_rig.animation_data_create()
+for t in ual_rig.animation_data.nla_tracks:
+    t.mute = True  # the importer stashes clips as NLA tracks that would override the active action
+
+wanted = CFG.get('animations')  # {exportName: UALActionName | "mixamo:<file stem>[@start-end]"}
+if any(v.startswith('mixamo:') for v in wanted.values()):
+    objs, _ = import_objects(bpy.ops.import_scene.fbx, filepath=os.path.join(MIXAMO_DIR, 'X Bot.fbx'))
+    temp_objs |= objs
+    sources['mixamo'] = Source(next(o for o in objs if o.type == 'ARMATURE'), MIXAMO_MAP)
+
+
+def resolve(spec):
+    """Returns (source, action, first frame, last frame) for an animation spec."""
+    if not spec.startswith('mixamo:'):
+        action = bpy.data.actions.get(spec)
+        if action is None:
+            return None
+        return sources['ual'], action, int(action.frame_range[0]), int(action.frame_range[1])
+    stem, _, rng = spec[len('mixamo:'):].partition('@')
+    objs, acts = import_objects(bpy.ops.import_scene.fbx, filepath=os.path.join(MIXAMO_DIR, stem + '.fbx'))
+    for o in objs:
+        bpy.data.objects.remove(o, do_unlink=True)
+    action = next(iter(acts))
+    f0, f1 = int(action.frame_range[0]), int(action.frame_range[1])
+    if rng:
+        a, b = rng.split('-')
+        f0, f1 = int(a), int(b)
+    return sources['mixamo'], action, f0, f1
+
 
 # Order target bones parent-first so parents are posed before children.
 ordered = []
@@ -112,76 +227,73 @@ for b in rig.data.bones:
     if b.parent is None:
         walk(b)
 
-wanted = CFG.get('animations')  # {exportName: UALActionName}
-src_rest = {n: rest_world(src_rig, mapping[n]) for n in mapping}
-dst_rest = {b.name: rest_world(rig, b.name) for b in rig.data.bones}
-
 rig.animation_data_create()
-src_rig.animation_data_create()
 for pb in rig.pose.bones:
     pb.rotation_mode = 'QUATERNION'  # we key rotation_quaternion below
-# The importer stashes every clip as an NLA track; those would override the active action.
-for t in src_rig.animation_data.nla_tracks:
-    t.mute = True
-scene = bpy.context.scene
+
+# Hands hold a sword and a shield in every clip: copy the finger pose of a
+# reference clip (first frame) onto all clips so grips never open up.
+grip_ref = CFG.get('gripFrom')
+grip_sides = tuple(CFG.get('gripHands', []))
+grip_pose = {}
+order = list(wanted.items())
+if grip_ref:
+    order.sort(key=lambda kv: kv[0] != grip_ref)
+
 baked = []
-for export_name, ual_name in wanted.items():
-    action = bpy.data.actions.get(ual_name)
-    if action is None:
-        log('MISSING action', ual_name)
+for export_name, spec in order:
+    found = resolve(spec)
+    if found is None:
+        log('MISSING action', spec)
         continue
-    src_rig.animation_data.action = action
-    if hasattr(action, 'slots') and len(action.slots):
-        src_rig.animation_data.action_slot = action.slots[0]
-    f0, f1 = int(action.frame_range[0]), int(action.frame_range[1])
+    src, action, f0, f1 = found
+    src.use(action)
     new_action = bpy.data.actions.new(export_name)
     rig.animation_data.action = new_action
-    for frame in range(f0, f1 + 1):
-        scene.frame_set(frame)
-        # World-space delta from rest, transferred bone by bone:
-        #   dst_world = src_world @ src_rest^-1 @ dst_rest   (rotation only)
+    for frame_no in range(f0, f1 + 1):
+        scene.frame_set(frame_no)
         dst_world = {}
         for b in ordered:
             pb = rig.pose.bones[b.name]
-            if b.name in mapping:
-                spb = src_rig.pose.bones[mapping[b.name]]
-                src_world = src_rig.matrix_world @ spb.matrix
-                delta = src_world.to_quaternion() @ src_rest[b.name].to_quaternion().inverted()
-                rot = (delta @ dst_rest[b.name].to_quaternion()).to_matrix().to_4x4()
+            parent_world = dst_world[b.parent.name] if b.parent else rig.matrix_world
+            local_rest = (b.parent.matrix_local.inverted() @ b.matrix_local) if b.parent else b.matrix_local
+            if b.name in src.map:
+                spb = src.arm.pose.bones[src.map[b.name]]
+                src_world = src.arm.matrix_world @ spb.matrix
+                rot = (rot3(src_world).to_quaternion() @ src.offset[b.name]).to_matrix().to_4x4()
                 if b.name == 'pelvis':
-                    t = src_world.translation.copy()
-                    t.x *= height_ratio
-                    t.y *= height_ratio
-                    t.z *= height_ratio
+                    t = src_world.translation * src.height_ratio
                 else:
-                    parent_world = dst_world[b.parent.name] if b.parent else rig.matrix_world
-                    rest_offset = (b.parent.matrix_local.inverted() @ b.matrix_local).translation if b.parent else b.matrix_local.translation
-                    t = parent_world @ rest_offset
+                    t = (parent_world @ local_rest).translation
                 world = Matrix.Translation(t) @ rot
             else:
-                parent_world = dst_world[b.parent.name] if b.parent else rig.matrix_world
-                local_rest = (b.parent.matrix_local.inverted() @ b.matrix_local) if b.parent else b.matrix_local
                 world = parent_world @ local_rest
             dst_world[b.name] = world
             pb.matrix = rig.matrix_world.inverted() @ world
             bpy.context.view_layer.update()
         for b in ordered:
             pb = rig.pose.bones[b.name]
-            pb.keyframe_insert('rotation_quaternion', frame=frame - f0)
+            if b.name in FINGER_BONES and b.name[-1] in grip_sides:
+                if export_name == grip_ref and frame_no == f0:
+                    grip_pose[b.name] = pb.rotation_quaternion.copy()
+                if b.name in grip_pose:
+                    pb.rotation_quaternion = grip_pose[b.name]
+            pb.keyframe_insert('rotation_quaternion', frame=frame_no - f0)
             if b.name == 'pelvis':
-                pb.keyframe_insert('location', frame=frame - f0)
+                pb.keyframe_insert('location', frame=frame_no - f0)
     track = rig.animation_data.nla_tracks.new()
     track.name = export_name
     track.strips.new(export_name, 0, new_action)
     track.mute = True  # keep earlier bakes from influencing later ones
     rig.animation_data.action = None
     baked.append(export_name)
-    log('baked', export_name, f1 - f0 + 1, 'frames')
+    log('baked', export_name, f1 - f0 + 1, 'frames from', spec)
 
 for t in rig.animation_data.nla_tracks:
     t.mute = False
-for o in src_objs:
-    bpy.data.objects.remove(o, do_unlink=True)
+for o in temp_objs:
+    if o.name in bpy.data.objects:
+        bpy.data.objects.remove(o, do_unlink=True)
 for b in rig.pose.bones:
     b.matrix_basis = Matrix.Identity(4)
 

@@ -1,6 +1,6 @@
 {
   "macros": {
-    "gender": 0.0,
+    "gender": 0,
     "age": 0.45,
     "muscle": 0.62,
     "weight": 0.42,
@@ -25,18 +25,27 @@
     "culturalibre_heroine_boots_1"
   ],
   "animations": {
-    "idle": "Idle_Loop",
-    "walk": "Walk_Loop",
-    "run": "Jog_Fwd_Loop",
+    "idle": "mixamo:sword and shield idle (4)",
+    "walk": "mixamo:sword and shield walk",
+    "run": "mixamo:sword and shield run",
     "sprint": "Sprint_Loop",
     "roll": "Roll",
-    "swordIdle": "Sword_Idle",
-    "attack": "Sword_Attack",
-    "hit": "Hit_Chest",
-    "death": "Death01",
-    "castEnter": "Spell_Simple_Enter",
-    "cast": "Spell_Simple_Shoot",
-    "interact": "Interact",
-    "attack2": "Punch_Cross"
-  }
+    "attack": "mixamo:sword and shield slash",
+    "attack2": "mixamo:sword and shield attack (4)",
+    "attack3": "mixamo:sword and shield slash (3)",
+    "whirl": "mixamo:sword and shield slash (2)",
+    "thrust": "mixamo:sword and shield attack (2)",
+    "slam": "mixamo:sword and shield slash (4)",
+    "block": "mixamo:sword and shield block",
+    "blockIdle": "mixamo:sword and shield block idle",
+    "blockHit": "mixamo:sword and shield impact",
+    "hit": "mixamo:sword and shield impact (2)",
+    "death": "mixamo:sword and shield death",
+    "interact": "Interact"
+  },
+  "gripFrom": "idle",
+  "gripHands": [
+    "l",
+    "r"
+  ]
 }

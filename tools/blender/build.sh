@@ -6,11 +6,13 @@ cd "$(dirname "$0")/../.."
 TOOLS="${WEB3DRPG_TOOLS:-../Web3DRPG-tools}"
 BLENDER="$TOOLS/blender-5.2.2-windows-x64/blender.exe"
 UAL="$TOOLS/ual/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb"
+# Mixamo "Sword And Shield Pack" FBX files (unzipped; not redistributable, never committed).
+MIXAMO="$TOOLS/mixamo"
 mkdir -p "$TOOLS/raw" public/models public/models/low public/models/hd
 for cfg in tools/blender/characters/${1:-*}.json; do
   name=$(basename "$cfg" .json)
   echo "== $name"
-  "$BLENDER" -b --factory-startup -P tools/blender/build_character.py -- "$cfg" "$TOOLS/raw/$name.glb" "$UAL" 2>&1 | grep -E "\[build\]|Error|Traceback" || true
+  "$BLENDER" -b --factory-startup -P tools/blender/build_character.py -- "$cfg" "$TOOLS/raw/$name.glb" "$UAL" "$MIXAMO" 2>&1 | grep -E "\[build\]|Error|Traceback" || true
   # Texture tiers: low = 512 (phones), default = 1024, hd = 2048 (PC high).
   for tier in low:512 :1024 hd:2048; do
     npx gltf-transform optimize "$TOOLS/raw/$name.glb" "public/models/${tier%%:*}/$name.glb" \

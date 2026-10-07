@@ -1,10 +1,11 @@
 import * as THREE from 'three/webgpu';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { Animator } from './animator';
-import { createSword, type CharacterModel } from './character';
+import { createShield, createSword, placeShield, placeSword, type CharacterModel } from './character';
 import type { ColliderWorld } from './colliders';
 import { rollDamage, type CombatEvents, type Combatant, type HitInfo, type Stats } from './combat';
 import { heightAt } from './terrain';
+import { ITEMS } from '../rpg/items';
 
 export type EnemyKind = 'bandit' | 'skeleton' | 'knight';
 
@@ -75,6 +76,8 @@ export class Enemy implements Combatant {
   private knock = new THREE.Vector3();
   private materials: THREE.MeshStandardMaterial[] = [];
   private flash = 0;
+  /** How long the current 'hit' state lasts (longer after being parried). */
+  private stun = 0.45;
 
   constructor(def: EnemyDef, model: CharacterModel, x: number, z: number) {
     this.def = def;
@@ -106,13 +109,21 @@ export class Enemy implements Combatant {
     this.animator.mixer.setTime(Math.random() * 2);
 
     let hand: THREE.Object3D | undefined;
+    let forearm: THREE.Object3D | undefined;
     body.traverse((o) => {
       if (o.name === 'hand_r') hand = o;
+      if (o.name === 'lowerarm_l') forearm = o;
     });
+    // The knight carries the shield it drops when defeated.
+    const shieldLook = def.kind === 'knight' ? ITEMS.knight_shield.shield : undefined;
+    if (forearm && shieldLook) {
+      const shield = createShield(shieldLook);
+      placeShield(shield);
+      forearm.add(shield);
+    }
     if (hand) {
       const weapon = createSword(def.kind === 'knight' ? 1.5 : def.kind === 'skeleton' ? 0.9 : 1);
-      weapon.rotation.set(0, 0, -Math.PI / 2);
-      weapon.position.set(0.02, 0.09, 0.025);
+      placeSword(weapon);
       hand.add(weapon);
     }
   }
@@ -141,6 +152,7 @@ export class Enemy implements Combatant {
     } else if (!this.def.boss || hit.heavy) {
       if (this.state !== 'attack' || !this.def.boss) {
         this.setState('hit');
+        this.stun = 0.45;
         this.animator.play('hit', { fade: 0.05, duration: 0.45 });
       }
     }
@@ -149,6 +161,22 @@ export class Enemy implements Combatant {
       this.stats.atk *= 1.25;
     }
     return hit.amount;
+  }
+
+  /** The player's perfect parry: the attack is knocked away, leaving an opening. */
+  parried(): void {
+    if (!this.alive) return;
+    this.engaged = true;
+    this.flash = 0.25;
+    this.setState('hit');
+    this.stun = this.def.boss ? 1.0 : 1.4;
+    this.cooldown = Math.max(this.cooldown, this.stun + 0.5);
+    this.animator.play('hit', { fade: 0.04, duration: 0.7 });
+  }
+
+  /** True while staggered by a parry: the window for a counter-attack. */
+  get staggered(): boolean {
+    return this.state === 'hit' && this.stun > 0.5;
   }
 
   private setState(s: State): void {
@@ -211,7 +239,7 @@ export class Enemy implements Combatant {
         break;
       }
       case 'hit':
-        if (this.stateTime > 0.45) this.setState('chase');
+        if (this.stateTime > this.stun) this.setState('chase');
         break;
       case 'return':
         if (fromHome < 1) {
@@ -259,7 +287,7 @@ export class Enemy implements Combatant {
     if (this.heavyAttack) events.shake(0.5);
     if (!inArc || !target.alive || target.invulnerable) return;
     const { amount, crit } = rollDamage(this.stats, target.stats, this.heavyAttack ? 1.8 : 1);
-    const dealt = target.receiveHit({ amount, crit, from: this.position, knockback: this.heavyAttack ? 9 : 4, heavy: this.heavyAttack });
+    const dealt = target.receiveHit({ amount, crit, from: this.position, knockback: this.heavyAttack ? 9 : 4, heavy: this.heavyAttack, attacker: this });
     if (dealt > 0) {
       events.damage(target, dealt, crit, false);
       events.shake(this.heavyAttack ? 0.6 : 0.25);

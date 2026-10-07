@@ -79,4 +79,4 @@ export function dialogFor(npc: NpcId, quest: QuestState, progress: number): Dial
   }
 }
 
-export const SHOP_STOCK = ['potion', 'hi_potion', 'steel_sword', 'iron_armor'];
+export const SHOP_STOCK = ['potion', 'hi_potion', 'steel_sword', 'iron_shield', 'iron_armor'];

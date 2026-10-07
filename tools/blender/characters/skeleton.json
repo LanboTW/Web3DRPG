@@ -1,7 +1,29 @@
 {
-  "macros": { "gender": 1.0, "age": 0.9, "muscle": 0.0, "weight": 0.0, "height": 0.55, "proportions": 0.5 },
+  "macros": {
+    "gender": 1,
+    "age": 0.9,
+    "muscle": 0,
+    "weight": 0,
+    "height": 0.55,
+    "proportions": 0.5
+  },
   "skin": "old_caucasian_male",
   "eyes": "low-poly",
-  "clothes": ["cortu_jeans_shorts"],
-  "animations": {"idle": "Sword_Idle", "walk": "Walk_Loop", "run": "Jog_Fwd_Loop", "attack": "Sword_Attack", "attack2": "Punch_Cross", "hit": "Hit_Chest", "death": "Death01"}
+  "clothes": [
+    "cortu_jeans_shorts"
+  ],
+  "animations": {
+    "idle": "mixamo:sword and shield idle (3)",
+    "walk": "mixamo:sword and shield walk",
+    "run": "mixamo:sword and shield run",
+    "attack": "mixamo:sword and shield slash",
+    "attack2": "mixamo:sword and shield attack (4)",
+    "hit": "mixamo:sword and shield impact (3)",
+    "death": "mixamo:sword and shield death"
+  },
+  "gripFrom": "idle",
+  "gripHands": [
+    "l",
+    "r"
+  ]
 }

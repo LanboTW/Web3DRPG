@@ -20,7 +20,7 @@ export interface SaveData {
   attrs: Attributes;
   gold: number;
   inventory: Record<string, number>;
-  equipped: { weapon: string; armor: string };
+  equipped: { weapon: string; armor: string; shield: string };
   quests: Record<string, { state: QuestState; progress: number }>;
   bossDefeated: boolean;
 }
@@ -37,8 +37,8 @@ function fresh(): SaveData {
     version: 1, level: 1, xp: 0, points: 0,
     attrs: { str: 3, vit: 3, agi: 3 },
     gold: 30,
-    inventory: { iron_sword: 1, cloth: 1, potion: 3 },
-    equipped: { weapon: 'iron_sword', armor: 'cloth' },
+    inventory: { iron_sword: 1, cloth: 1, wood_shield: 1, potion: 3 },
+    equipped: { weapon: 'iron_sword', armor: 'cloth', shield: 'wood_shield' },
     quests: Object.fromEntries(Object.keys(QUESTS).map((id) => [id, { state: 'inactive' as QuestState, progress: 0 }])),
     bossDefeated: false,
   };
@@ -72,6 +72,11 @@ export class GameState {
     if (!s || s.version !== 1 || typeof s.level !== 'number' || !s.attrs || !s.inventory || !s.equipped) return null;
     const base = fresh();
     for (const id of Object.keys(base.quests)) s.quests[id] ??= base.quests[id];
+    // Saves from before shields existed start with the wooden one.
+    if (!s.equipped.shield) {
+      s.equipped.shield = 'wood_shield';
+      s.inventory.wood_shield ??= 1;
+    }
     return s;
   }
 
@@ -120,10 +125,11 @@ export class GameState {
     const { str, vit, agi } = this.data.attrs;
     const w = ITEMS[this.data.equipped.weapon];
     const a = ITEMS[this.data.equipped.armor];
+    const sh = ITEMS[this.data.equipped.shield];
     return {
       maxHp: 100 + vit * 12 + (this.data.level - 1) * 6 + (a?.hp ?? 0),
       atk: 8 + str * 2 + (this.data.level - 1) + (w?.atk ?? 0),
-      def: 2 + Math.floor(vit * 0.5) + (a?.def ?? 0),
+      def: 2 + Math.floor(vit * 0.5) + (a?.def ?? 0) + (sh?.def ?? 0),
       critChance: Math.min(0.6, 0.04 + agi * 0.012 + (w?.crit ?? 0)),
     };
   }
@@ -175,6 +181,7 @@ export class GameState {
     if (!def || !this.data.inventory[id]) return;
     if (def.kind === 'weapon') this.data.equipped.weapon = id;
     if (def.kind === 'armor') this.data.equipped.armor = id;
+    if (def.kind === 'shield') this.data.equipped.shield = id;
     this.changed();
   }
 

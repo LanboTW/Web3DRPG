@@ -11,6 +11,8 @@ type SkillName = keyof typeof SKILL_KEYS;
 export class CombatHud {
   private hud = document.getElementById('hud')!;
   private hpFill: HTMLElement;
+  private staminaBar: HTMLElement;
+  private staminaFill: HTMLElement;
   private ultBar: HTMLElement;
   private ultFill: HTMLElement;
   private skillEls = new Map<SkillName, HTMLElement[]>();
@@ -32,9 +34,12 @@ export class CombatHud {
     };
     const bars = el(`<div id="player-bars">
       <div class="bar hp"><i></i></div>
+      <div class="bar stamina"><i></i></div>
       <div class="bar ult"><i></i></div></div>`);
     this.hud.append(bars);
     this.hpFill = bars.querySelector('.hp > i')!;
+    this.staminaBar = bars.querySelector('.stamina')!;
+    this.staminaFill = bars.querySelector('.stamina > i')!;
     this.ultBar = bars.querySelector('.ult')!;
     this.ultFill = bars.querySelector('.ult > i')!;
 
@@ -94,6 +99,8 @@ export class CombatHud {
   update(player: Player, enemies: Enemy[], boss: Enemy | undefined): void {
     this.hpFill.style.transform = `scaleX(${player.hp / player.stats.maxHp})`;
     this.ultFill.style.transform = `scaleX(${player.ultCharge / 100})`;
+    this.staminaFill.style.transform = `scaleX(${player.stamina / player.maxStamina})`;
+    this.staminaBar.classList.toggle('exhausted', player.exhausted);
     const ultReady = player.ultCharge >= 100;
     this.ultBar.classList.toggle('full', ultReady);
     for (const [name, els] of this.skillEls) {

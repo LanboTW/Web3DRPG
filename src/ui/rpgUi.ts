@@ -204,7 +204,7 @@ export class RpgUi {
       <div class="row">可用屬性點：<b>${d.points}</b></div>
       <div class="attrs"></div>
       <div class="derived">生命 ${s.maxHp}　攻擊 ${s.atk}　防禦 ${s.def}　暴擊 ${Math.round(s.critChance * 100)}%</div>
-      <div class="row">武器：${ITEMS[d.equipped.weapon].name}　防具：${ITEMS[d.equipped.armor].name}</div>
+      <div class="row">武器：${ITEMS[d.equipped.weapon].name}　盾牌：${ITEMS[d.equipped.shield].name}　防具：${ITEMS[d.equipped.armor].name}</div>
       <div class="row">金幣：◈ ${d.gold}</div></div>`);
     const list = box.querySelector('.attrs')!;
     for (const [key, name, hint] of attrs) {
@@ -221,8 +221,8 @@ export class RpgUi {
     for (const [id, n] of Object.entries(d.inventory)) {
       const def = ITEMS[id];
       if (!def) continue;
-      const equipped = d.equipped.weapon === id || d.equipped.armor === id;
-      const stat = def.atk ? `攻擊 +${def.atk}` : def.def !== undefined && def.kind === 'armor' ? `防禦 +${def.def}${def.hp ? `・生命 +${def.hp}` : ''}` : '';
+      const equipped = d.equipped.weapon === id || d.equipped.armor === id || d.equipped.shield === id;
+      const stat = def.kind === 'shield' ? `格擋 ${Math.round((def.guard ?? 0) * 100)}%${def.def ? `・防禦 +${def.def}` : ''}` : def.atk ? `攻擊 +${def.atk}` : def.def !== undefined && def.kind === 'armor' ? `防禦 +${def.def}${def.hp ? `・生命 +${def.hp}` : ''}` : '';
       const action = def.kind === 'consumable' ? '使用' : equipped ? '已裝備' : '裝備';
       const row = el(`<div class="item"><div><b>${def.name}</b>${n > 1 ? ` ×${n}` : ''}<small>${def.desc} ${stat}</small></div><button ${equipped ? 'disabled' : ''}>${action}</button></div>`);
       row.querySelector('button')!.addEventListener('click', () => {
