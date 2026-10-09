@@ -439,11 +439,19 @@ function buildRocks(scene: THREE.Scene, props: PropLibrary, colliders: ColliderW
     const dim = props.size(name);
     const s = (size * 2 * (1 + rand() * 0.3)) / Math.max(dim.x, dim.z);
     normalAt(x, z, normal);
-    q.setFromUnitVectors(UP, normal.lerp(UP, 0.4).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(UP, rand() * Math.PI * 2));
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, heightAt(x, z) - dim.y * s * 0.22, z), q, new THREE.Vector3(s, s * (0.8 + rand() * 0.4), s));
+    const yaw = rand() * Math.PI * 2;
+    q.setFromUnitVectors(UP, normal.lerp(UP, 0.4).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(UP, yaw));
+    const sy = s * (0.8 + rand() * 0.4);
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, heightAt(x, z) - dim.y * s * 0.22, z), q, new THREE.Vector3(s, sy, s));
     const v = 0.8 + rand() * 0.25;
     add(name, m, new THREE.Color(v, v * (0.97 + rand() * 0.05), v * 0.94));
-    if (size > 0.9) colliders.add({ kind: 'circle', x, z, r: size * 0.9 });
+    // Knee-high rocks can be stepped over; the rest get a collider slightly inside
+    // the visible footprint (a box for elongated rocks, a circle for round ones).
+    if (dim.y * (sy - s * 0.22) < 0.5) continue;
+    const hw = ((dim.x * s) / 2) * 0.8;
+    const hd = ((dim.z * s) / 2) * 0.8;
+    if (Math.max(hw, hd) / Math.min(hw, hd) > 1.3) colliders.add({ kind: 'box', x, z, hw, hd, rot: yaw });
+    else colliders.add({ kind: 'circle', x, z, r: Math.min(hw, hd) });
   }
   // Fallen trunks in the woods.
   for (let i = 0; i < LOGS; i++) {

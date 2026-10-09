@@ -144,8 +144,24 @@ async function main(): Promise<void> {
   if (import.meta.env.DEV) bindColliderDebug(world.scene, world.colliders);
 
   // Treasure chests: loot once, remembered in the save.
-  const CHEST_RANGE = 2.2;
-  const unopened = () => world.chests.filter((c) => !state.data.openedChests.includes(c.id));
+  const CHEST_RANGE = 2.8;
+  const isOpened = (c: Chest) => state.data.openedChests.includes(c.id);
+  const unopened = () => world.chests.filter((c) => !isOpened(c));
+  // Looted chests are darkened so it reads why they no longer open.
+  const dimChest = (c: Chest) => {
+    c.object.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData.dimmed) return;
+      mesh.userData.dimmed = true;
+      const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
+        const d = m.clone() as THREE.MeshStandardMaterial;
+        d.color?.multiplyScalar(0.4);
+        return d;
+      });
+      mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
+    });
+  };
+  world.chests.filter(isOpened).forEach(dimChest);
   let chestAnim: { chest: Chest; t: number } | null = null;
   const openChest = (chest: Chest) => {
     if (!state.openChest(chest.id, chest.loot)) return;
@@ -174,6 +190,7 @@ async function main(): Promise<void> {
     if (a.t > 0.8) {
       o.rotation.z = 0;
       o.scale.setScalar(1);
+      dimChest(a.chest);
       chestAnim = null;
     }
   };
@@ -333,22 +350,34 @@ async function main(): Promise<void> {
       talkingTo = null;
     }
 
-    // Nearest NPC or unopened chest in range offers an interaction.
+    // Of the NPCs and chests in range, prefer what the player faces, then the nearest.
     let near: Npc | null = null;
     let nearChest: Chest | null = null;
     let best = Infinity;
+    const fx = Math.sin(player.facing);
+    const fz = Math.cos(player.facing);
+    const score = (p: THREE.Vector3) => {
+      const dx = p.x - player.position.x;
+      const dz = p.z - player.position.z;
+      const d = Math.hypot(dx, dz);
+      const facing = (dx * fx + dz * fz) / Math.max(d, 0.001) > 0.5;
+      return d + (facing ? 0 : 100);
+    };
     for (const n of npcs) {
-      const d = n.position.distanceTo(player.position);
-      if (d < INTERACT_RANGE && d < best) [near, best] = [n, d];
+      if (n.position.distanceTo(player.position) >= INTERACT_RANGE) continue;
+      const s = score(n.position);
+      if (s < best) [near, best] = [n, s];
     }
-    for (const c of unopened()) {
-      const d = c.position.distanceTo(player.position);
-      if (d < CHEST_RANGE && d < best) [near, nearChest, best] = [null, c, d];
+    for (const c of world.chests) {
+      if (c.position.distanceTo(player.position) >= CHEST_RANGE) continue;
+      const s = score(c.position);
+      if (s < best) [near, nearChest, best] = [null, c, s];
     }
     const key = input.touch ? '' : input.hasPad && !input.pointerLocked ? '[B] ' : '[F] ';
+    const chestEmpty = !!nearChest && (isOpened(nearChest) || chestAnim?.chest === nearChest);
     if (!player.alive) ui.setPrompt(null);
     else if (near) ui.setPrompt(`與 ${NPC_NAMES[near.id]} 交談`, '交談', key);
-    else if (nearChest) ui.setPrompt('打開寶箱', '開啟', key);
+    else if (nearChest) ui.setPrompt(chestEmpty ? '空的寶箱' : '打開寶箱', '開啟', key, chestEmpty);
     else ui.setPrompt(null);
     if (player.alive && input.wasPressed('interact') && !ui.dialogOpen) {
       if (near) {
@@ -357,7 +386,7 @@ async function main(): Promise<void> {
         near.talking = true;
         ui.openDialog(near.id, dialogFor(near.id, q.state, q.progress));
         input.suppress();
-      } else if (nearChest) {
+      } else if (nearChest && !chestEmpty) {
         openChest(nearChest);
       }
     }

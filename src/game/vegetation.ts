@@ -174,13 +174,20 @@ export async function createVegetation(
     const isBush = v.name.startsWith('bush');
     const windStrength = isBush ? 0.12 : v.height * 0.022;
 
-    // Trunk collider from the base ring of the trunk.
-    let trunk = 0;
+    // Trunk collider sized to the visible trunk, not the flared roots or low branches
+    // (which made invisible walls). Trunk rings are sparse, so take the innermost
+    // vertex between knee and head height: that is the trunk ring's radius.
     const bp = branchGeo.attributes.position;
-    for (let i = 0; i < bp.count; i++) if (bp.getY(i) < 0.4) trunk = Math.max(trunk, Math.hypot(bp.getX(i), bp.getZ(i)));
+    const ring: number[] = [];
+    for (let i = 0; i < bp.count; i++) {
+      const y = bp.getY(i);
+      if (y > 0.3 && y < 2) ring.push(Math.hypot(bp.getX(i), bp.getZ(i)));
+    }
+    const inner = ring.length ? Math.min(...ring) : 0.3;
+    const trunk = ring.reduce((m, d) => (d <= inner * 1.5 ? Math.max(m, d) : m), inner);
     if (!isBush) {
       for (const t of instances) {
-        if (Math.abs(t.x) < PLAY_HALF + 5 && Math.abs(t.z) < PLAY_HALF + 5) colliders.add({ kind: 'circle', x: t.x, z: t.z, r: Math.max(0.25, trunk * t.scale * 0.9) });
+        if (Math.abs(t.x) < PLAY_HALF + 5 && Math.abs(t.z) < PLAY_HALF + 5) colliders.add({ kind: 'circle', x: t.x, z: t.z, r: Math.max(0.2, trunk * t.scale) });
       }
     }
 

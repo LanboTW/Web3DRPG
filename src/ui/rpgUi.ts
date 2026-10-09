@@ -70,12 +70,13 @@ export class RpgUi {
   }
 
   /** Interaction hint such as "與 村長 交談"; `button` labels the touch button. */
-  setPrompt(text: string | null, button = '交談', key = '[F] '): void {
+  setPrompt(text: string | null, button = '交談', key = '[F] ', disabled = false): void {
     const show = !!text && !this.dialogOpen;
-    this.prompt.textContent = show ? `${key}${text}` : '';
-    this.prompt.style.display = show ? '' : 'none';
+    this.prompt.textContent = show ? `${disabled ? '' : key}${text}` : '';
+    this.prompt.style.display = show ? 'block' : 'none';
+    this.prompt.classList.toggle('disabled', disabled);
     if (this.interactBtn) {
-      this.interactBtn.hidden = !show;
+      this.interactBtn.hidden = !show || disabled;
       if (show && this.interactBtn.textContent !== button) this.interactBtn.textContent = button;
     }
   }
