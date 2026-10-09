@@ -99,6 +99,9 @@ export class Input {
     else this.bindMouse();
   }
 
+  /** True for one frame after the pointer lock was released (Esc, alt-tab, or a UI opening). */
+  lockLost = false;
+
   wasPressed(action: Action): boolean {
     return this.pressed.has(action);
   }
@@ -197,6 +200,7 @@ export class Input {
 
   endFrame(): void {
     this.pressed.clear();
+    this.lockLost = false;
     this.zoom = 0;
   }
 
@@ -209,8 +213,11 @@ export class Input {
   private bindMouse(): void {
     const canvas = this.canvas;
     document.addEventListener('pointerlockchange', () => {
+      const was = this.pointerLocked;
       this.pointerLocked = document.pointerLockElement === canvas;
       this.mouseBlock = false;
+      // The browser swallows the Esc that releases pointer lock, so report the release instead.
+      if (was && !this.pointerLocked) this.lockLost = true;
     });
     // The camera only turns while the pointer is captured; there is no drag fallback.
     document.addEventListener('mousemove', (e) => {

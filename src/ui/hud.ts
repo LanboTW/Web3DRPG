@@ -21,11 +21,8 @@ export class Hud {
     if (input.touch) document.getElementById('touch')!.hidden = false;
     document.getElementById('btn-settings')!.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.panel.hidden = !this.panel.hidden;
-      if (!this.panel.hidden) {
-        document.exitPointerLock?.();
-        this.renderPanel();
-      }
+      if (this.panel.hidden) this.openPanel();
+      else this.closePanel();
     });
   }
 
@@ -42,6 +39,12 @@ export class Hud {
 
   get panelOpen(): boolean {
     return !this.panel.hidden;
+  }
+
+  openPanel(): void {
+    this.panel.hidden = false;
+    document.exitPointerLock?.();
+    this.renderPanel();
   }
 
   closePanel(): void {

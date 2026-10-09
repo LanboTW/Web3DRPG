@@ -316,7 +316,9 @@ async function main(): Promise<void> {
     const dt = hitStop > 0 ? realDt * 0.08 : realDt;
 
     input.update(realDt);
-    // Modal layers: map, menu, settings. Tab/M/Esc close whichever is on top.
+    // Modal layers: map, menu, settings. Tab/M/Esc close whichever is on top;
+    // Esc during play (or losing pointer lock to it) opens settings.
+    const lockLost = input.lockLost && !minimap.open && !ui.menuOpen && !hud.panelOpen;
     const closing = input.wasPressed('menu') || input.wasPressed('map') || input.wasPressed('back');
     if (minimap.open) {
       if (closing) minimap.close();
@@ -327,6 +329,7 @@ async function main(): Promise<void> {
     } else if (!ui.dialogOpen) {
       if (input.wasPressed('menu')) ui.toggleMenu();
       else if (input.wasPressed('map')) minimap.show();
+      else if (input.wasPressed('back') || lockLost) hud.openPanel();
     }
     const modal = minimap.open || ui.menuOpen || hud.panelOpen;
     // Mouse players need the pointer captured; until then the game waits behind a gate.
