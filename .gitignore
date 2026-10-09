@@ -5,3 +5,4 @@ dist
 .claude
 # Raw Mixamo downloads must not be redistributed
 tools/mixamo/
+__pycache__/
