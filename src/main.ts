@@ -6,6 +6,7 @@ import { backendName, createRenderer, DynamicResolution, webGPUAvailable } from 
 import { Input } from './input/input';
 import { canGrow, createWorld } from './game/world';
 import { createVegetation } from './game/vegetation';
+import { loadProps } from './game/props';
 import { createGrass } from './game/grass';
 import { createAtmosphere, SKY_SUN } from './game/sky';
 import { PostStack } from './engine/post';
@@ -43,7 +44,8 @@ async function main(): Promise<void> {
   const t0 = performance.now();
   const terrainMat = await createTerrainMaterial(quality);
   const { atmosphere, fogNode } = await createAtmosphere(quality, cameraFar * 0.9, quality.fogFar);
-  const world = createWorld(quality, terrainMat.material, atmosphere, fogNode);
+  const props = await loadProps(quality);
+  const world = createWorld(quality, terrainMat.material, atmosphere, fogNode, props);
   const vegetation = await createVegetation(renderer, quality, world.scene, world.colliders, canGrow);
   const grass = createGrass(quality, world.terrain, terrainMat.grass, world.scene);
   console.info(`world built in ${Math.round(performance.now() - t0)} ms`);

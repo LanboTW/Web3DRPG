@@ -51,8 +51,8 @@ function naturalHeight(x: number, z: number): number {
   return h;
 }
 
-/** Height of the land before the stream is carved in. */
-function landHeight(x: number, z: number): number {
+/** Natural height with the village, ruins and camp levelled. */
+function settledHeight(x: number, z: number): number {
   let h = naturalHeight(x, z);
   const dv = Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.y);
   h = THREE.MathUtils.lerp(VILLAGE_HEIGHT + fbm(x * 0.05, z * 0.05, 2, 5) * 0.6, h, smoothstep(VILLAGE_RADIUS * 0.75, VILLAGE_RADIUS * 1.4, dv));
@@ -63,11 +63,17 @@ function landHeight(x: number, z: number): number {
     const campH = naturalHeight(BANDIT_CAMP.x, BANDIT_CAMP.y);
     h = THREE.MathUtils.lerp(campH, h, smoothstep(CAMP_RADIUS * 0.6, CAMP_RADIUS * 1.6, dc));
   }
-  // Roads cut a gentle, smoothed bed into the hills.
+  return h;
+}
+
+/** Height of the land before the stream is carved in. */
+function landHeight(x: number, z: number): number {
+  const h = settledHeight(x, z);
+  // Roads cut a gentle, smoothed bed into the hills (but never into the levelled sites).
   const road = roadDistance(x, z);
   if (road < 9) {
-    const blurred = (naturalHeight(x + 4, z) + naturalHeight(x - 4, z) + naturalHeight(x, z + 4) + naturalHeight(x, z - 4)) / 4;
-    h = THREE.MathUtils.lerp(Math.min(h, blurred), h, smoothstep(3, 9, road));
+    const blurred = (settledHeight(x + 4, z) + settledHeight(x - 4, z) + settledHeight(x, z + 4) + settledHeight(x, z - 4)) / 4;
+    return THREE.MathUtils.lerp(Math.min(h, blurred), h, smoothstep(3, 9, road));
   }
   return h;
 }
@@ -205,8 +211,17 @@ export function bridgeDeck(x: number, z: number): number {
 }
 
 /** Walkable height: terrain, or the bridge deck where it is higher. */
+/** Two-step octagonal dais in the ruins (boss arena); its top is walkable. */
+export const DAIS = { x: RUINS_CENTER.x, z: RUINS_CENTER.y - 6, steps: [[5.45, 0.35], [4.55, 0.75]] as const };
+let daisBase: number | undefined;
+export function daisTop(x: number, z: number): number {
+  const d = Math.hypot(x - DAIS.x, z - DAIS.z);
+  if (d > DAIS.steps[0][0]) return -Infinity;
+  daisBase ??= heightAt(DAIS.x, DAIS.z);
+  return daisBase + (d > DAIS.steps[1][0] ? DAIS.steps[0][1] : DAIS.steps[1][1]);
+}
 export function groundAt(x: number, z: number): number {
-  return Math.max(heightAt(x, z), bridgeDeck(x, z));
+  return Math.max(heightAt(x, z), bridgeDeck(x, z), daisTop(x, z));
 }
 
 export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE.Vector3 {

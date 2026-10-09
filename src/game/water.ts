@@ -92,7 +92,7 @@ export function createWater(): THREE.Mesh {
   // Foam where the stream is shallow and lively.
   const foam = smoothstep(0.12, 0.0, d).mul(smoothstep(0.2, 0.6, h0.add(0.2))).mul(f.z).mul(0.3);
   mat.colorNode = mix(mix(shallow, deep, depthT), vec3(0.7, 0.72, 0.68), foam);
-  mat.opacityNode = smoothstep(0.0, 0.2, d).mul(mix(float(0.3), float(0.88), depthT)).max(foam);
+  mat.opacityNode = smoothstep(0.0, 0.15, d).mul(mix(float(0.55), float(0.92), depthT)).max(foam);
   mat.roughnessNode = mix(float(0.05), float(0.4), foam);
 
   const mesh = new THREE.Mesh(geo, mat);

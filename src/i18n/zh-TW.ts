@@ -30,7 +30,7 @@ export const zhTW = {
   'help.touch': '左側搖桿 移動（推到底奔跑）・右側滑動 轉視角\n右下按鈕 攻擊／閃避／按住格擋／技能',
   'help.gamepad': '手把：左搖桿 移動（按下 L3 奔跑）・右搖桿 視角・X 攻擊・A 閃避\n按住 LB 格擋・RB/RT 技能・Y 奧義・R3 鎖定\nB 交談・十字鍵上 藥水・Start 選單',
   'enemy.bandit': '山賊',
-  'enemy.skeleton': '亡者戰士',
+  'enemy.skeleton': '骷髏戰士',
   'enemy.knight': '亡靈騎士・蓋爾德',
   'skill.skill1': '旋風斬',
   'skill.skill2': '突刺',

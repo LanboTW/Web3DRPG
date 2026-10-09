@@ -325,17 +325,14 @@ function styleMaterial(kind: EnemyKind, meshName: string, m: THREE.MeshStandardM
   m.emissive = new THREE.Color(0xff3020);
   m.emissiveIntensity = 0;
   if (kind === 'skeleton') {
-    if (/body/i.test(meshName)) {
-      // Desiccated, grey-green undead flesh over the base skin texture.
-      m.color.set(0x7d8a78);
-      m.roughness = 0.8;
-    } else if (/low-poly|eye/i.test(meshName)) {
-      m.map = null;
+    // Procedural bone body (tools/blender/bone_body.py): old ivory bone, ember eyes.
+    if (/glow/i.test(meshName)) {
       m.color.set(0x000000);
       m.emissive.set(0xff4a1a);
-      m.emissiveIntensity = 2;
-    } else {
-      m.color.multiplyScalar(0.45);
+      m.emissiveIntensity = 3;
+    } else if (/bone/i.test(meshName)) {
+      m.color.setRGB(0.92, 0.88, 0.8);
+      m.roughness = 0.75;
     }
   } else if (kind === 'knight') {
     if (/worksuit|boots/i.test(meshName)) {

@@ -297,6 +297,16 @@ for o in temp_objs:
 for b in rig.pose.bones:
     b.matrix_basis = Matrix.Identity(4)
 
+# ------------------------------------------------------------------ bone body
+# Undead: swap the human meshes for a procedural skeleton bound to the same rig.
+if CFG.get('boneBody'):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[sys.argv.index('-P') + 1])))
+    import bone_body  # noqa: E402
+    tools = os.path.abspath(UAL_PATH).replace('\\', '/').split('/ual/')[0]
+    body = bone_body.build(rig, f'{tools}/polyhaven/{CFG["boneBody"]}/{CFG["boneBody"]}')
+    for o in [o for o in bpy.data.objects if o.type == 'MESH' and o is not body]:
+        bpy.data.objects.remove(o, do_unlink=True)
+
 # ------------------------------------------------------------------ export prep
 # Apply MPFB's helper-masking modifiers so the exported mesh is clean.
 for obj in [o for o in bpy.data.objects if o.type == 'MESH']:

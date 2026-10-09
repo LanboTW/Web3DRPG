@@ -47,3 +47,11 @@ blender -b --factory-startup --python tools/blender/bake_sky.py -- <8k.hdr> <out
 ```
 then resize the raw RGB strip (8192 × 2129) to 8192/4096/2048-wide JPEGs (`sky_hd`, `sky`,
 `sky_low`) with sharp. The script also prints the sun direction used in `src/game/sky.ts`.
+
+## Skeleton warrior
+
+`characters/skeleton.json` sets `"boneBody": "<Poly Haven texture id>"`. After the
+animations are baked, `bone_body.py` replaces the human meshes with a procedural skeleton
+(skull with ember eyes, vertebrae, ribs, pelvis, limb bones, hands and feet) laid out on the
+rig's rest pose; every piece is weighted 100% to one rig bone, so all clips play unchanged.
+The bone texture is fetched with `node tools/props/fetch_polyhaven.mjs 1k texture:white_rough_plaster`.

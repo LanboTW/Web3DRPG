@@ -8,10 +8,7 @@
     "proportions": 0.5
   },
   "skin": "old_caucasian_male",
-  "eyes": "low-poly",
-  "clothes": [
-    "cortu_jeans_shorts"
-  ],
+  "clothes": [],
   "animations": {
     "idle": "mixamo:sword and shield idle (3)",
     "walk": "mixamo:sword and shield walk",
@@ -25,5 +22,6 @@
   "gripHands": [
     "l",
     "r"
-  ]
+  ],
+  "boneBody": "white_rough_plaster"
 }

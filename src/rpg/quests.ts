@@ -27,7 +27,7 @@ export const QUESTS: Record<string, QuestDef> = {
   },
   side_undead: {
     id: 'side_undead', main: false, title: '斷絕的商路', giver: 'merchant',
-    target: { kind: 'skeleton', count: 4, label: '擊退亡者戰士' },
+    target: { kind: 'skeleton', count: 4, label: '擊退骷髏戰士' },
     reward: { xp: 150, gold: 120, items: { hi_potion: 2 } },
   },
 };
@@ -68,11 +68,11 @@ export function dialogFor(npc: NpcId, quest: QuestState, progress: number): Dial
     case 'merchant': {
       const shop = { label: '看看商品', action: 'shop' as const };
       if (quest === 'inactive') return [
-        { text: '歡迎光臨！唉，可惜貨不多……通往廢墟的道路被亡者戰士佔據，我的貨車過不去。' },
-        { text: '如果妳能擊退四個亡者，我會好好答謝妳的。', choices: [
+        { text: '歡迎光臨！唉，可惜貨不多……通往廢墟的道路被骷髏戰士佔據，我的貨車過不去。' },
+        { text: '如果妳能擊退四個骷髏，我會好好答謝妳的。', choices: [
           { label: '我來處理', action: 'accept' }, shop, { label: '再見', action: 'close' }] },
       ];
-      if (quest === 'active') return [{ text: `亡者們在廢墟南側徘徊。目前進度：${progress} / 4。`, choices: [shop, { label: '再見', action: 'close' }] }];
+      if (quest === 'active') return [{ text: `骷髏們在廢墟南側徘徊。目前進度：${progress} / 4。`, choices: [shop, { label: '再見', action: 'close' }] }];
       if (quest === 'ready') return [{ text: '路通了！這些高級藥水請收下，還有說好的謝禮。', choices: [{ label: '收下', action: 'turnIn' }] }];
       return [{ text: '恩人來了！需要什麼儘管看。', choices: [shop, { label: '再見', action: 'close' }] }];
     }
