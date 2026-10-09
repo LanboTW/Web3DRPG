@@ -66,6 +66,7 @@ export class Input {
 
   private releasedAt = -Infinity;
   private retryTimer = 0;
+  private escDownAt = -Infinity;
   private keys = new Set<string>();
   private pressed = new Set<Action>();
   private padPrev: boolean[] = [];
@@ -90,6 +91,7 @@ export class Input {
       if (e.code === 'Space' && document.activeElement instanceof HTMLButtonElement) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
+      if (e.code === 'Escape') this.escDownAt = performance.now();
       const action = KEY_ACTIONS[e.code];
       if (action) this.pressed.add(action);
     });
@@ -125,17 +127,21 @@ export class Input {
     if (this.touch || this.pointerLocked) return;
     clearTimeout(this.retryTimer);
     this.retryTimer = 0;
-    const retry = () => {
+    const retry = (minWait = 250) => {
       if (this.pointerLocked || performance.now() > retryUntil) return;
-      const wait = Math.max(250, this.releasedAt + RELOCK_COOLDOWN - performance.now());
+      const wait = Math.max(minWait, this.releasedAt + RELOCK_COOLDOWN - performance.now());
       this.retryTimer = window.setTimeout(() => {
         this.retryTimer = 0;
         this.requestLock(retryUntil);
       }, wait);
     };
+    // Locking while the Esc that closed a menu is still held lets the browser treat
+    // that Esc as releasing the new lock, which reopened settings. Wait for its keyup.
+    // (Capped, in case the browser swallowed that keyup.)
+    if (this.keys.has('Escape') && performance.now() - this.escDownAt < 1000) return retry(50);
     if (performance.now() - this.releasedAt < RELOCK_COOLDOWN) return retry();
     try {
-      Promise.resolve(this.canvas.requestPointerLock?.()).catch(retry);
+      Promise.resolve(this.canvas.requestPointerLock?.()).catch(() => retry());
     } catch {
       retry();
     }
