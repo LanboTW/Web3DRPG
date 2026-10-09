@@ -4,7 +4,7 @@ import { Animator } from './animator';
 import { createShield, createSword, placeShield, placeSword, type CharacterModel } from './character';
 import type { ColliderWorld } from './colliders';
 import { rollDamage, type CombatEvents, type Combatant, type HitInfo, type Stats } from './combat';
-import { heightAt } from './terrain';
+import { groundAt } from './terrain';
 import { ITEMS } from '../rpg/items';
 
 export type EnemyKind = 'bandit' | 'skeleton' | 'knight';
@@ -84,7 +84,7 @@ export class Enemy implements Combatant {
     this.stats = { ...def.stats };
     this.hp = def.stats.maxHp;
     this.radius = 0.45 * def.scale;
-    this.home = new THREE.Vector3(x, heightAt(x, z), z);
+    this.home = new THREE.Vector3(x, groundAt(x, z), z);
     this.position.copy(this.home);
 
     const body = SkeletonUtils.clone(model.root);
@@ -262,7 +262,7 @@ export class Enemy implements Combatant {
     this.position.addScaledVector(this.knock, dt);
     this.knock.multiplyScalar(Math.exp(-8 * dt));
     colliders.resolve(this.position, this.radius);
-    this.position.y = heightAt(this.position.x, this.position.z);
+    this.position.y = groundAt(this.position.x, this.position.z);
     this.root.rotation.y = this.facing;
     this.animator.update(dt);
   }

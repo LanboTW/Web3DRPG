@@ -22,7 +22,7 @@ function load(res: string, name: string, map: 'diff' | 'nor_gl', anisotropy: num
  * by the `splat` vertex attribute (x = mud, y = rock, z = stone). The vertex
  * colour stays as a subtle tint so large-scale variation survives.
  */
-export async function createTerrainMaterial(quality: QualitySettings): Promise<{ material: THREE.MeshStandardNodeMaterial; upgrade: () => Promise<void> }> {
+export async function createTerrainMaterial(quality: QualitySettings): Promise<{ material: THREE.MeshStandardNodeMaterial; upgrade: () => Promise<void>; grass: THREE.Texture }> {
   const useNormals = quality.tier !== 'low';
   const anisotropy = quality.tier === 'high' ? 8 : 4;
   const diff = await Promise.all(LAYERS.map((n) => load('1k', n, 'diff', anisotropy)));
@@ -69,5 +69,5 @@ export async function createTerrainMaterial(quality: QualitySettings): Promise<{
       nor[i].needsUpdate = true;
     });
   };
-  return { material, upgrade };
+  return { material, upgrade, grass: diff[0] };
 }

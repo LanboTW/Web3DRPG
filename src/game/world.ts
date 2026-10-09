@@ -4,8 +4,9 @@ import type { QualitySettings } from '../engine/quality';
 import { ColliderWorld } from './colliders';
 import { rng } from './noise';
 import { SUN_DIRECTION, type Atmosphere } from './sky';
+import { createWater } from './water';
 import {
-  createTerrain, heightAt, normalAt, roadDistance, PLAY_HALF,
+  createTerrain, heightAt, normalAt, roadDistance, waterDistance, bridgeDeck, BRIDGE, PLAY_HALF,
   VILLAGE_CENTER, VILLAGE_RADIUS, RUINS_CENTER, RUINS_RADIUS, BANDIT_CAMP, CAMP_RADIUS,
 } from './terrain';
 
@@ -59,7 +60,9 @@ export function createWorld(quality: QualitySettings, terrainMaterial: THREE.Mat
   buildVillage(scene, colliders, cameraBlockers);
   buildRuins(scene, colliders, cameraBlockers);
   buildCamp(scene, colliders, cameraBlockers);
-  buildForest(scene, colliders, cameraBlockers, quality.vegetationDensity);
+  buildRocks(scene, colliders, cameraBlockers, quality.vegetationDensity);
+  buildBridge(scene, colliders);
+  scene.add(createWater());
 
   let mist = 0;
   return {
@@ -87,8 +90,6 @@ const thatch = new THREE.MeshStandardMaterial({ color: 0x8a6d3e, roughness: 1 })
 const stone = new THREE.MeshStandardMaterial({ color: 0x8d877c, roughness: 0.9 });
 const mossStone = new THREE.MeshStandardMaterial({ color: 0x6f7560, roughness: 0.95 });
 const bark = new THREE.MeshStandardMaterial({ color: 0x4b3a2a, roughness: 0.95 });
-const pineLeaves = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
-const broadLeaves = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true });
 const rockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, flatShading: true });
 
 function place(obj: THREE.Object3D, x: number, z: number, rotY = 0, sink = 0): THREE.Object3D {
@@ -343,112 +344,121 @@ function buildCamp(scene: THREE.Scene, colliders: ColliderWorld, blockers: THREE
   }
 }
 
-// ---------------------------------------------------------------- forest
-function buildForest(scene: THREE.Scene, colliders: ColliderWorld, blockers: THREE.Object3D[], density: number): void {
-  const rand = rng(1234);
-  const PINES = Math.round(900 * density);
-  const BROADS = Math.round(450 * density);
-  const ROCKS = Math.round(260 * density);
-
-  const canPlace = (x: number, z: number, clearRoad: number) => {
-    if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.y) < VILLAGE_RADIUS) return false;
-    if (Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y) < RUINS_RADIUS - 6) return false;
-    if (roadDistance(x, z) < clearRoad) return false;
-    if (Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y) < CAMP_RADIUS) return false;
-    return true;
+// ---------------------------------------------------------------- bridge
+/** Timber footbridge carrying the road over the stream (walkable via groundAt). */
+function buildBridge(scene: THREE.Scene, colliders: ColliderWorld): void {
+  const { centre, dir, half, width, yaw } = BRIDGE;
+  const rand = rng(404);
+  const planks = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 });
+  const bridge = new THREE.Group();
+  const at = (along: number, across: number) => {
+    const x = centre.x + dir.x * along + dir.y * across;
+    const z = centre.y + dir.y * along - dir.x * across;
+    return { x, z, y: bridgeDeck(x, z) };
   };
+  // Local frame: +Z runs along the road, +X across it.
+  const local = (along: number, across: number, y: number) => new THREE.Vector3(across, y, along);
+  const slope = (along: number) => Math.atan2(at(along + 0.5, 0).y - at(along - 0.5, 0).y, 1);
+
+  // Deck planks with a little irregularity.
+  const PITCH = 0.3;
+  const count = Math.floor((half * 2) / PITCH);
+  const deck = new THREE.InstancedMesh(new THREE.BoxGeometry(width, 0.08, PITCH - 0.03), planks, count);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), c = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    const along = -half + (i + 0.5) * PITCH;
+    const p = at(along, 0);
+    e.set(-slope(along), (rand() - 0.5) * 0.03, (rand() - 0.5) * 0.02);
+    m.compose(local(along, (rand() - 0.5) * 0.08, p.y - 0.04), q.setFromEuler(e), new THREE.Vector3(1 + (rand() - 0.5) * 0.06, 1, 1));
+    deck.setMatrixAt(i, m);
+    deck.setColorAt(i, c.setHSL(0.07 + rand() * 0.02, 0.32, 0.2 + rand() * 0.08));
+  }
+  bridge.add(deck);
+
+  // Stringers under the deck and rails on top, in short segments that follow the arch.
+  const SEG = 1.5;
+  for (let along = -half; along < half - 0.01; along += SEG) {
+    const mid = along + SEG / 2;
+    const p = at(mid, 0);
+    for (const across of [-width / 2 + 0.25, 0, width / 2 - 0.25]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, SEG + 0.04), timber);
+      beam.position.copy(local(mid, across, p.y - 0.21));
+      beam.rotation.x = -slope(mid);
+      bridge.add(beam);
+    }
+    for (const across of [-width / 2, width / 2]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, SEG + 0.04), timber);
+      rail.position.copy(local(mid, across, p.y + 0.98));
+      rail.rotation.x = -slope(mid);
+      const lower = rail.clone();
+      lower.position.y -= 0.45;
+      bridge.add(rail, lower);
+    }
+  }
+  // Posts: rail posts on the deck, and piles from the deck down into the stream bed.
+  for (let along = -half; along <= half + 0.01; along += SEG) {
+    for (const across of [-width / 2, width / 2]) {
+      const p = at(along, across);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.2, 0.16), timber);
+      post.position.copy(local(along, across, p.y + 0.5));
+      bridge.add(post);
+      const ground = heightAt(p.x, p.z);
+      if (p.y - ground > 0.5) {
+        const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, p.y - ground + 0.6, 8), timber);
+        pile.position.copy(local(along, across + Math.sign(across) * 0.12, (p.y + ground - 0.6) / 2));
+        bridge.add(pile);
+      }
+    }
+  }
+  bridge.position.set(centre.x, 0, centre.y);
+  bridge.rotation.y = yaw;
+  bridge.traverse((o) => {
+    o.castShadow = true;
+    o.receiveShadow = true;
+  });
+  scene.add(bridge);
+  // Rails keep walkers on the deck (and out from under it).
+  for (const side of [-1, 1]) {
+    const ox = Math.cos(yaw) * side * (width / 2 + 0.05), oz = -Math.sin(yaw) * side * (width / 2 + 0.05);
+    colliders.add({ kind: 'box', x: centre.x + ox, z: centre.y + oz, hw: 0.1, hd: half, rot: yaw });
+  }
+}
+
+// ---------------------------------------------------------------- open land
+/** Keeps trees, bushes and rocks off settlements, roads, the stream and the bridge. */
+export function canGrow(x: number, z: number, clearance: number): boolean {
+  if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.y) < VILLAGE_RADIUS) return false;
+  if (Math.hypot(x - RUINS_CENTER.x, z - RUINS_CENTER.y) < RUINS_RADIUS - 6) return false;
+  if (roadDistance(x, z) < clearance) return false;
+  if (Math.hypot(x - BANDIT_CAMP.x, z - BANDIT_CAMP.y) < CAMP_RADIUS) return false;
+  if (waterDistance(x, z) < clearance * 0.5) return false;
+  return true;
+}
+
+function buildRocks(scene: THREE.Scene, colliders: ColliderWorld, blockers: THREE.Object3D[], density: number): void {
+  const rand = rng(1234);
+  const ROCKS = Math.round(260 * density);
   const randomSpot = (clearRoad: number, extent = PLAY_HALF + 25): [number, number] | null => {
     for (let tries = 0; tries < 20; tries++) {
       const x = (rand() * 2 - 1) * extent;
       const z = (rand() * 2 - 1) * extent;
-      if (canPlace(x, z, clearRoad)) return [x, z];
+      if (canGrow(x, z, clearRoad)) return [x, z];
     }
     return null;
   };
-
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
   const color = new THREE.Color();
   const up = new THREE.Vector3(0, 1, 0);
-
-  // Pines: trunk + three stacked cones merged per tier into one instanced mesh each.
-  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.32, 4, 7);
-  trunkGeo.translate(0, 2, 0);
-  const coneGeos = [0, 1, 2].map((i) => {
-    const g = new THREE.ConeGeometry(2.4 - i * 0.65, 3.4 - i * 0.4, 9);
-    g.translate(0, 3 + i * 1.9, 0);
-    return g;
-  });
-  const pineTrunks = new THREE.InstancedMesh(trunkGeo, bark, PINES);
-  const pineCones = coneGeos.map((g) => new THREE.InstancedMesh(g, pineLeaves, PINES));
-
   let n = 0;
-  for (let i = 0; i < PINES; i++) {
-    const spot = randomSpot(6);
-    if (!spot) continue;
-    const [x, z] = spot;
-    const scale = 0.8 + rand() * 0.9;
-    q.setFromAxisAngle(up, rand() * Math.PI * 2);
-    s.setScalar(scale);
-    p.set(x, heightAt(x, z) - 0.2, z);
-    m.compose(p, q, s);
-    pineTrunks.setMatrixAt(n, m);
-    color.setHSL(0.27 + rand() * 0.06, 0.35 + rand() * 0.2, 0.16 + rand() * 0.08);
-    pineCones.forEach((c) => {
-      c.setMatrixAt(n, m);
-      c.setColorAt(n, color);
-    });
-    if (Math.abs(x) < PLAY_HALF + 5 && Math.abs(z) < PLAY_HALF + 5) colliders.add({ kind: 'circle', x, z, r: 0.35 * scale });
-    n++;
-  }
-  for (const im of [pineTrunks, ...pineCones]) {
-    im.count = n;
-    im.castShadow = true;
-    im.receiveShadow = true;
-    scene.add(im);
-  }
-
-  // Broadleaf trees: trunk + lumpy icosahedron crown.
-  const broadTrunk = new THREE.CylinderGeometry(0.22, 0.4, 3.5, 7);
-  broadTrunk.translate(0, 1.75, 0);
-  const crownGeo = new THREE.IcosahedronGeometry(2.6, 1);
-  jitter(crownGeo, 0.45, rand);
-  crownGeo.scale(1, 0.85, 1);
-  crownGeo.translate(0, 5, 0);
-  const broadTrunks = new THREE.InstancedMesh(broadTrunk, bark, BROADS);
-  const crowns = new THREE.InstancedMesh(crownGeo, broadLeaves, BROADS);
-  n = 0;
-  for (let i = 0; i < BROADS; i++) {
-    const spot = randomSpot(7);
-    if (!spot) continue;
-    const [x, z] = spot;
-    const scale = 0.8 + rand() * 0.6;
-    q.setFromAxisAngle(up, rand() * Math.PI * 2);
-    s.setScalar(scale);
-    p.set(x, heightAt(x, z) - 0.2, z);
-    m.compose(p, q, s);
-    broadTrunks.setMatrixAt(n, m);
-    crowns.setMatrixAt(n, m);
-    color.setHSL(0.2 + rand() * 0.08, 0.4 + rand() * 0.2, 0.2 + rand() * 0.1);
-    crowns.setColorAt(n, color);
-    if (Math.abs(x) < PLAY_HALF + 5 && Math.abs(z) < PLAY_HALF + 5) colliders.add({ kind: 'circle', x, z, r: 0.45 * scale });
-    n++;
-  }
-  for (const im of [broadTrunks, crowns]) {
-    im.count = n;
-    im.castShadow = true;
-    im.receiveShadow = true;
-    scene.add(im);
-  }
 
   // Rocks — the large ones block movement and the camera.
   const rockGeo = new THREE.DodecahedronGeometry(1, 1);
   jitter(rockGeo, 0.25, rand);
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, ROCKS);
   const normal = new THREE.Vector3();
-  n = 0;
   for (let i = 0; i < ROCKS; i++) {
     const spot = randomSpot(4);
     if (!spot) continue;

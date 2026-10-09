@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { Animator } from './animator';
 import type { CharacterModel } from './character';
 import type { ColliderWorld } from './colliders';
-import { heightAt } from './terrain';
+import { groundAt } from './terrain';
 import type { NpcId } from '../rpg/quests';
 
 export const INTERACT_RANGE = 3;
@@ -17,7 +17,7 @@ export class Npc {
   talking = false;
 
   constructor(readonly id: NpcId, model: CharacterModel, x: number, z: number, facing: number, colliders: ColliderWorld) {
-    this.position.set(x, heightAt(x, z), z);
+    this.position.set(x, groundAt(x, z), z);
     this.facing = this.baseFacing = facing;
     this.root.rotation.y = facing;
     this.root.add(model.root);

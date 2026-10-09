@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { Input } from '../input/input';
-import { heightAt } from './terrain';
+import { groundAt } from './terrain';
 
 const MIN_DIST = 2.2;
 const MAX_DIST = 10;
@@ -81,7 +81,7 @@ export class ThirdPersonCamera {
 
     const cam = this.camera.position.copy(this.focus).addScaledVector(dir, this.currentDist);
     // Never dip below the terrain.
-    const ground = heightAt(cam.x, cam.z) + 0.4;
+    const ground = groundAt(cam.x, cam.z) + 0.4;
     if (cam.y < ground) cam.y = ground;
     this.camera.lookAt(this.focus);
     if (this.shake > 0.001) {

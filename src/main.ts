@@ -4,7 +4,9 @@ import { applyI18n, t } from './i18n';
 import { loadChoice, resolveQuality } from './engine/quality';
 import { backendName, createRenderer, DynamicResolution, webGPUAvailable } from './engine/renderer';
 import { Input } from './input/input';
-import { createWorld } from './game/world';
+import { canGrow, createWorld } from './game/world';
+import { createVegetation } from './game/vegetation';
+import { createGrass } from './game/grass';
 import { createAtmosphere, SKY_SUN } from './game/sky';
 import { PostStack } from './engine/post';
 import { createTerrainMaterial } from './game/terrainMaterial';
@@ -42,6 +44,8 @@ async function main(): Promise<void> {
   const terrainMat = await createTerrainMaterial(quality);
   const { atmosphere, fogNode } = await createAtmosphere(quality, cameraFar * 0.9, quality.fogFar);
   const world = createWorld(quality, terrainMat.material, atmosphere, fogNode);
+  const vegetation = await createVegetation(renderer, quality, world.scene, world.colliders, canGrow);
+  const grass = createGrass(quality, world.terrain, terrainMat.grass, world.scene);
   console.info(`world built in ${Math.round(performance.now() - t0)} ms`);
 
   setProgress(0.4, 'loading.player');
@@ -99,9 +103,11 @@ async function main(): Promise<void> {
   const cam = new ThirdPersonCamera(window.innerWidth / window.innerHeight, cameraFar);
   if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { cam, world });
   const post = new PostStack(renderer, world.scene, cam.camera, quality, SKY_SUN);
-  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { post, atmosphere });
+  if (import.meta.env.DEV) Object.assign((window as unknown as { __game: object }).__game, { post, atmosphere, vegetation, grass });
   cam.yaw = player.facing + Math.PI;
   cam.snapTo(player.position, player.eyeHeight);
+  vegetation.update(cam.camera);
+  grass.update(cam.camera, player.position);
 
   // Compile shaders before revealing the scene to avoid first-frame hitches.
   // WebGL compiles in parallel and polls for completion; never let a stalled
@@ -227,6 +233,8 @@ async function main(): Promise<void> {
     const lock = player.lockTarget ? player.lockTarget.chest(lockPos) : null;
     cam.update(realDt, input, player.position, player.eyeHeight, world.cameraBlockers, lock);
     world.follow(player.position, realDt);
+    vegetation.update(cam.camera);
+    grass.update(cam.camera, player.position);
     input.endFrame();
 
     if (!player.alive) {

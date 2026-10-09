@@ -5,7 +5,7 @@ import type { ColliderWorld } from './colliders';
 import { createShield, createSword, placeShield, placeSword, type CharacterModel } from './character';
 import { inArc, inRadius, rollDamage, type CombatEvents, type Combatant, type HitInfo, type Stats } from './combat';
 import type { Enemy } from './enemy';
-import { heightAt, PLAY_HALF } from './terrain';
+import { groundAt, PLAY_HALF } from './terrain';
 import type { Vfx } from './vfx';
 import type { ItemDef } from '../rpg/items';
 
@@ -215,7 +215,7 @@ export class Player implements Combatant {
   }
 
   spawn(x: number, z: number): void {
-    this.position.set(x, heightAt(x, z), z);
+    this.position.set(x, groundAt(x, z), z);
   }
 
   revive(x: number, z: number): void {
@@ -454,7 +454,7 @@ export class Player implements Combatant {
     }
     this.position.x = THREE.MathUtils.clamp(this.position.x, -PLAY_HALF, PLAY_HALF);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -PLAY_HALF, PLAY_HALF);
-    this.position.y = heightAt(this.position.x, this.position.z);
+    this.position.y = groundAt(this.position.x, this.position.z);
     this.root.rotation.y = this.facing;
 
     this.animator.update(dt);
