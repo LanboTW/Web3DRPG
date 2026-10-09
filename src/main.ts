@@ -14,7 +14,8 @@ import { createTerrainMaterial } from './game/terrainMaterial';
 import { Player } from './game/player';
 import { loadCharacter } from './game/character';
 import { ThirdPersonCamera } from './game/camera';
-import { BANDIT_CAMP, RUINS_CENTER, VILLAGE_CENTER } from './game/terrain';
+import { BANDIT_CAMP, groundAt, RUINS_CENTER, streamQuery, VILLAGE_CENTER, VILLAGE_RADIUS } from './game/terrain';
+import { audio, type MusicTrack } from './game/audio';
 import { hideLoading, nextFrame, setProgress, showError } from './ui/loading';
 import { Hud } from './ui/hud';
 import { CombatHud } from './ui/combatHud';
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
   const input = new Input(renderer.domElement);
   const player = new Player(heroine);
   // Dev-only handle for inspecting the scene from the browser console.
-  if (import.meta.env.DEV) Object.assign(window, { __game: { player, enemies, input } });
+  if (import.meta.env.DEV) Object.assign(window, { __game: { player, enemies, input, audio } });
   const applyGear = () => {
     player.setStats(state.stats());
     player.setLook(ITEMS[state.data.equipped.weapon], ITEMS[state.data.equipped.armor], ITEMS[state.data.equipped.shield]);
@@ -78,6 +79,15 @@ async function main(): Promise<void> {
   applyGear();
   player.hp = player.stats.maxHp;
   let gearKey = '';
+  // Jingles for progress: level ups, quest steps and loot.
+  let progress = { level: state.data.level, gold: state.data.gold, quests: JSON.stringify(Object.values(state.data.quests).map((q) => q.state)) };
+  state.onChange(() => {
+    const quests = JSON.stringify(Object.values(state.data.quests).map((q) => q.state));
+    if (state.data.level > progress.level) audio.play('levelup', { bus: 'ui' });
+    else if (quests !== progress.quests) audio.play('confirm', { bus: 'ui' });
+    else if (state.data.gold > progress.gold) audio.play('coins', { bus: 'ui', volume: 0.6 });
+    progress = { level: state.data.level, gold: state.data.gold, quests };
+  });
   state.onChange(() => {
     const key = `${state.data.equipped.weapon}|${state.data.equipped.armor}|${state.data.equipped.shield}|${state.data.level}|${JSON.stringify(state.data.attrs)}`;
     if (key !== gearKey) {
@@ -126,6 +136,7 @@ async function main(): Promise<void> {
     const pick = id ?? (missing > 100 && state.data.inventory.hi_potion ? 'hi_potion' : state.data.inventory.potion ? 'potion' : 'hi_potion');
     if (!player.alive || missing <= 0 || !state.removeItem(pick)) return;
     player.heal(ITEMS[pick].heal ?? 0);
+    audio.play('potion', { bus: 'ui' });
     vfx.ring(player.position, 1.2, 0x6dff9a, 0.6);
   };
   ui.onUsePotion = (id) => usePotion(id);
@@ -156,6 +167,8 @@ async function main(): Promise<void> {
     }
   };
   player.onGuard = (result, at) => {
+    audio.play(result === 'parry' ? 'bell' : result === 'block' ? 'plate' : 'plate_heavy', { at, volume: result === 'block' ? 0.9 : 1 });
+    if (result !== 'block') audio.play('metal_heavy', { at, volume: result === 'parry' ? 0.7 : 1, rate: result === 'parry' ? 1.2 : 0.85 });
     if (result === 'parry') {
       vfx.spark(at, 0xbfe8ff, 14);
       vfx.ring(at.clone().setY(player.position.y + 0.05), 1.6, 0x9fd8ff, 0.35);
@@ -183,6 +196,25 @@ async function main(): Promise<void> {
   hideLoading();
   // High tier streams sharper ground textures after the game is playable.
   terrainMat.upgrade().catch((e) => console.warn('texture upgrade failed', e));
+
+  // Sound loads in the background; the first tap or key press unlocks it.
+  audio.load();
+  audio.loop('amb_birds', undefined, 0.45);
+  audio.loop('amb_fire', new THREE.Vector3(BANDIT_CAMP.x, groundAt(BANDIT_CAMP.x, BANDIT_CAMP.y) + 0.5, BANDIT_CAMP.y), 1.2, 3);
+  const stream = audio.loop('amb_water', new THREE.Vector3(), 0.9, 4);
+  const streamPos = new THREE.Vector3();
+  let soundTick = 0;
+  let calm = 0;
+  const chooseMusic = (dt: number): MusicTrack => {
+    const boss = enemies.boss;
+    if (boss?.alive && boss.engaged && boss.position.distanceTo(player.position) < 40) return 'boss';
+    const fighting = player.alive && enemies.list.some((e) => e.alive && e.engaged && e.position.distanceTo(player.position) < 25);
+    // Stay on the battle theme a few seconds after the last enemy falls.
+    calm = fighting ? 0 : calm + dt;
+    if (calm < 5) return 'battle';
+    return Math.hypot(player.position.x - VILLAGE_CENTER.x, player.position.z - VILLAGE_CENTER.y) < VILLAGE_RADIUS + 10 ? 'village' : 'explore';
+  };
+  calm = 99;
 
   const lockPos = new THREE.Vector3();
   let last = performance.now();
@@ -250,6 +282,16 @@ async function main(): Promise<void> {
     }
     combatHud.update(player, enemies.list, enemies.boss);
     ui.updateTags(npcs, cam.camera, player.position, questOf);
+
+    audio.setListener(cam.camera);
+    soundTick -= realDt;
+    if (soundTick <= 0) {
+      soundTick = 0.25;
+      // The stream sounds from its nearest point.
+      const q = streamQuery(player.position.x, player.position.z);
+      stream?.setPosition(streamPos.set(q.x, q.level + 0.2, q.z));
+      audio.music(chooseMusic(0.25));
+    }
 
     post.render();
     dynRes.update(dt);

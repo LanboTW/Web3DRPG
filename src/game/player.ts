@@ -8,6 +8,8 @@ import type { Enemy } from './enemy';
 import { groundAt, PLAY_HALF } from './terrain';
 import type { Vfx } from './vfx';
 import type { ItemDef } from '../rpg/items';
+import { audio } from './audio';
+import { footstep, swordHit } from './sounds';
 
 const WALK_SPEED = 2.2;
 const RUN_SPEED = 4.6;
@@ -123,6 +125,8 @@ export class Player implements Combatant {
   private staminaDelay = 0;
   private guard = 0.6;
   private guardCost = 1.6;
+  /** Distance walked since the last footstep. */
+  private stride = 0;
 
   constructor(model: CharacterModel) {
     this.model = model.root;
@@ -237,7 +241,10 @@ export class Player implements Combatant {
     this.hp = Math.max(0, this.hp - hit.amount);
     this.ultCharge = Math.min(ULT_COST, this.ultCharge + 4);
     this.knock.set(this.position.x - hit.from.x, 0, this.position.z - hit.from.z).normalize().multiplyScalar(hit.knockback);
+    audio.play('body_hit', { volume: hit.heavy ? 1 : 0.75 });
+    if (hit.heavy) audio.play('slam', { volume: 0.7 });
     if (this.hp <= 0) {
+      audio.play('body_fall', { delay: 0.7 });
       this.cancelMove();
       this.animator.play('death', { fade: 0.1 });
       return hit.amount;
@@ -370,6 +377,7 @@ export class Player implements Combatant {
       this.blocking = true;
       this.blockTime = 0;
       this.animator.play('block', { fade: 0.08, duration: 0.3 });
+      audio.play('cloth', { volume: 0.5 });
     } else if (!wantBlock && this.blocking && this.staggerTimer <= 0) {
       this.blocking = false;
     }
@@ -384,6 +392,8 @@ export class Player implements Combatant {
       else this.dodgeDir.set(Math.sin(this.facing), 0, Math.cos(this.facing));
       this.facing = Math.atan2(this.dodgeDir.x, this.dodgeDir.z);
       this.animator.play('roll', { fade: 0.06, duration: DODGE_TIME + 0.1 });
+      audio.play('cloth', { volume: 0.8 });
+      audio.play('leather', { volume: 0.6, delay: 0.32 });
     }
 
     if (input.wasPressed('attack') && !this.blocking) this.attackQueued = true;
@@ -456,8 +466,25 @@ export class Player implements Combatant {
     this.position.z = THREE.MathUtils.clamp(this.position.z, -PLAY_HALF, PLAY_HALF);
     this.position.y = groundAt(this.position.x, this.position.z);
     this.root.rotation.y = this.facing;
+    this.footsteps(dt);
 
     this.animator.update(dt);
+  }
+
+  /** One step sound per stride while walking or running on the ground. */
+  private footsteps(dt: number): void {
+    const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    if (speed < 0.5 || this.dodgeTimer > 0 || this.move) {
+      this.stride = Math.min(this.stride, 0.4);
+      return;
+    }
+    this.stride += speed * dt;
+    // Longer strides at speed; matches the walk/run/sprint cycles.
+    const length = 0.55 + speed * 0.12;
+    if (this.stride >= length) {
+      this.stride -= length;
+      footstep(this.position, 0.35 + Math.min(0.4, speed * 0.05));
+    }
   }
 
   private cancelMove(): void {
@@ -478,6 +505,13 @@ export class Player implements Combatant {
     const from = move.clipFrom ?? 0;
     const span = (move.clipTo ?? 1) - from;
     this.animator.play(move.clip, { fade: 0.06, duration: move.duration / span, from });
+    // Whoosh just ahead of each blow.
+    if (move.vfx === 'ult') {
+      audio.play('magic', { volume: 0.8, rate: 0.8 });
+      audio.play('swing_heavy', { delay: move.hits[0] - 0.12, rate: 0.7 });
+    } else {
+      for (const t of move.hits) audio.play(move.heavy ? 'swing_heavy' : 'swing', { delay: Math.max(0, t - 0.1), volume: 0.85 });
+    }
   }
 
   private updateMove(dt: number, enemies: Enemy[], events: CombatEvents, vfx: Vfx): void {
@@ -503,6 +537,8 @@ export class Player implements Combatant {
     if (move.vfx === 'whirl') vfx.ring(center, move.range, 0xffc070);
     if (move.vfx === 'thrust') vfx.ring(center, move.range, 0x9fd8ff, 0.3);
     if (move.vfx === 'ult') {
+      audio.play('slam', { rate: 0.6 });
+      audio.play('metal_heavy', { volume: 0.5, rate: 0.6 });
       vfx.burst(center.clone().setY(center.y + 1), move.range, 0xff7a2a, 0.8);
       events.shake(0.9);
     }
@@ -514,6 +550,7 @@ export class Player implements Combatant {
       const dealt = e.receiveHit({ amount, crit, from: this.position, knockback: move.knockback, heavy: move.heavy });
       if (dealt <= 0) continue;
       landed = true;
+      swordHit(e.def.kind, e.chest(new THREE.Vector3()), crit, move.heavy);
       events.damage(e, dealt, crit, true);
       vfx.spark(e.chest(new THREE.Vector3()).addScaledVector(forward, -0.3), crit ? 0xfff2b0 : 0xffb050, crit ? 10 : 6);
       if (move !== SKILLS.ultimate) this.ultCharge = Math.min(ULT_COST, this.ultCharge + 6);

@@ -49,6 +49,9 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
 };
 
+import { audio } from './audio';
+import { enemyDeath, enemyStep, enemySwing } from './sounds';
+
 type State = 'idle' | 'chase' | 'attack' | 'hit' | 'return' | 'dead';
 
 export class Enemy implements Combatant {
@@ -78,6 +81,10 @@ export class Enemy implements Combatant {
   private flash = 0;
   /** How long the current 'hit' state lasts (longer after being parried). */
   private stun = 0.45;
+  /** Distance moved since the last footstep. */
+  private stride = 0;
+  /** Countdown to the next idle sound (skeletons creak while they wait). */
+  private idleNoise = 2 + Math.random() * 6;
 
   constructor(def: EnemyDef, model: CharacterModel, x: number, z: number) {
     this.def = def;
@@ -147,6 +154,7 @@ export class Enemy implements Combatant {
     const poise = this.def.boss ? 0.15 : 1;
     this.knock.copy(away).multiplyScalar(hit.knockback * poise);
     if (this.hp <= 0) {
+      enemyDeath(this.def.kind, this.position);
       this.setState('dead');
       this.animator.play('death', { fade: 0.1 });
     } else if (!this.def.boss || hit.heavy) {
@@ -206,8 +214,15 @@ export class Enemy implements Combatant {
     switch (this.state) {
       case 'idle':
         this.animator.play('idle');
+        this.idleNoise -= dt;
+        if (def.kind === 'skeleton' && this.idleNoise <= 0) {
+          this.idleNoise = 3 + Math.random() * 6;
+          audio.play('rattle', { at: this.position, volume: 0.4, rate: 0.8 });
+        }
         if (target.alive && dist < def.aggroRange) {
           this.engaged = true;
+          if (def.kind === 'skeleton') audio.play('rattle', { at: this.position, rate: 0.7 });
+          if (def.kind === 'knight') audio.play('unsheathe', { at: this.position, rate: 0.8 });
           this.setState('chase');
         }
         break;
@@ -258,6 +273,11 @@ export class Enemy implements Combatant {
     if (moveDir) {
       this.faceTowards(moveDir, dt, 8);
       this.position.addScaledVector(moveDir, moveSpeed * dt);
+      this.stride += moveSpeed * dt;
+      if (this.stride > 0.6 + moveSpeed * 0.14) {
+        this.stride = 0;
+        enemyStep(def.kind, this.position);
+      }
     }
     this.position.addScaledVector(this.knock, dt);
     this.knock.multiplyScalar(Math.exp(-8 * dt));
@@ -274,6 +294,8 @@ export class Enemy implements Combatant {
     this.heavyAttack = this.def.boss === true && this.enraged && Math.random() < 0.4;
     const clip = this.heavyAttack || Math.random() < 0.7 ? 'attack' : 'attack2';
     this.animator.play(clip, { fade: 0.1, duration: this.enraged ? this.def.attackDuration * 0.8 : this.def.attackDuration });
+    const windup = this.enraged ? this.def.attackWindup * 0.75 : this.def.attackWindup;
+    enemySwing(this.def.kind, this.position, this.heavyAttack, Math.max(0, windup - 0.12));
   }
 
   private strike(target: Combatant & { invulnerable: boolean }, events: CombatEvents): void {
@@ -284,7 +306,10 @@ export class Enemy implements Combatant {
     const facingDot = (dx * Math.sin(this.facing) + dz * Math.cos(this.facing)) / Math.max(d, 0.001);
     const reach = def.attackRange + 0.4 + (this.heavyAttack ? 1.5 : 0);
     const inArc = this.heavyAttack ? d < reach : d < reach && facingDot > 0.35;
-    if (this.heavyAttack) events.shake(0.5);
+    if (this.heavyAttack) {
+      events.shake(0.5);
+      audio.play('slam', { at: this.position, rate: 0.7 });
+    }
     if (!inArc || !target.alive || target.invulnerable) return;
     const { amount, crit } = rollDamage(this.stats, target.stats, this.heavyAttack ? 1.8 : 1);
     const dealt = target.receiveHit({ amount, crit, from: this.position, knockback: this.heavyAttack ? 9 : 4, heavy: this.heavyAttack, attacker: this });

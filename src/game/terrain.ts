@@ -146,8 +146,8 @@ export const STREAM: StreamSample[] = (() => {
 export const POND_LEVEL = STREAM[STREAM.length - 1].level;
 
 /** Nearest point on the stream: distance, water level and half-width there. */
-export function streamQuery(x: number, z: number): { dist: number; level: number; width: number; s: number } {
-  let best = Infinity, level = 0, width = 0, s = 0;
+export function streamQuery(x: number, z: number): { dist: number; level: number; width: number; s: number; x: number; z: number } {
+  let best = Infinity, level = 0, width = 0, s = 0, px = 0, pz = 0;
   for (let i = 0; i < STREAM.length - 1; i++) {
     const a = STREAM[i], b = STREAM[i + 1];
     const abx = b.x - a.x, abz = b.z - a.z;
@@ -158,9 +158,11 @@ export function streamQuery(x: number, z: number): { dist: number; level: number
       level = a.level + (b.level - a.level) * t;
       width = a.width + (b.width - a.width) * t;
       s = a.s + (b.s - a.s) * t;
+      px = a.x + abx * t;
+      pz = a.z + abz * t;
     }
   }
-  return { dist: best, level, width, s };
+  return { dist: best, level, width, s, x: px, z: pz };
 }
 
 /** Distance to open water (stream or pond edge), negative inside the pond. */

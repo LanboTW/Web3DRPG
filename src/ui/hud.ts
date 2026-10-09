@@ -2,6 +2,7 @@ import { t } from '../i18n';
 import { saveChoice, type QualityChoice, type QualitySettings } from '../engine/quality';
 import type { Input } from '../input/input';
 import type { GameState } from '../rpg/state';
+import { audio, type AudioSettings } from '../game/audio';
 
 export class Hud {
   private stats = document.getElementById('stats')!;
@@ -50,6 +51,10 @@ export class Hud {
       <div class="row">${options
         .map((c) => `<button data-q="${c}" class="${c === this.choice ? 'active' : ''}">${label(c)}</button>`)
         .join('')}</div>
+      <h3>${t('settings.audio')}</h3>
+      ${(['master', 'music', 'sfx'] as const)
+        .map((k) => `<label class="slider">${t(`audio.${k}`)}<input type="range" min="0" max="1" step="0.05" data-vol="${k}" value="${audio.settings[k]}"></label>`)
+        .join('')}
       <h3>${t('settings.controls')}</h3>
       <div class="help">${t(this.input.touch ? 'help.touch' : 'help.pc')}</div>
       <div class="help">${t('help.gamepad')}</div>
@@ -84,6 +89,12 @@ export class Hud {
       this.state.reset();
       location.reload();
     });
+    this.panel.querySelectorAll<HTMLInputElement>('[data-vol]').forEach((input) =>
+      input.addEventListener('input', () => {
+        audio.settings[input.dataset.vol as keyof AudioSettings] = Number(input.value);
+        audio.applySettings(true);
+      }),
+    );
     this.panel.querySelectorAll<HTMLButtonElement>('[data-q]').forEach((btn) =>
       btn.addEventListener('click', () => {
         const choice = btn.dataset.q as QualityChoice;

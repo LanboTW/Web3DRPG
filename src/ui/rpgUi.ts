@@ -3,6 +3,7 @@ import { NPC_NAMES, QUESTS, SHOP_STOCK, type DialogPage, type DialogAction, type
 import { xpToNext, type Attributes, type GameState } from '../rpg/state';
 import * as THREE from 'three/webgpu';
 import type { Npc } from '../game/npc';
+import { audio } from '../game/audio';
 
 type Tab = 'character' | 'inventory' | 'quests' | 'shop';
 
@@ -103,6 +104,7 @@ export class RpgUi {
     this.pages = pages;
     this.page = 0;
     this.dialog.hidden = false;
+    audio.play('page', { bus: 'ui', volume: 0.7 });
     this.renderPage();
   }
 
@@ -118,6 +120,7 @@ export class RpgUi {
     if (current.choices) return;
     if (this.page < this.pages.length - 1) {
       this.page++;
+      audio.play('page', { bus: 'ui', volume: 0.6 });
       this.renderPage();
     } else {
       this.closeDialog();
@@ -154,11 +157,13 @@ export class RpgUi {
   openMenu(tab: Tab): void {
     document.exitPointerLock?.();
     this.tab = tab;
+    if (this.menu.hidden) audio.play('book_open', { bus: 'ui', volume: 0.7 });
     this.menu.hidden = false;
     this.renderMenu();
   }
 
   closeMenu(): void {
+    if (!this.menu.hidden) audio.play('book_close', { bus: 'ui', volume: 0.6 });
     this.menu.hidden = true;
   }
 
@@ -183,6 +188,7 @@ export class RpgUi {
       const b = el(`<button class="${id === this.tab ? 'active' : ''}">${label}</button>`);
       b.addEventListener('click', () => {
         this.tab = id;
+        audio.play('page', { bus: 'ui', volume: 0.5 });
         this.renderMenu();
       });
       tabsEl.append(b);
@@ -227,7 +233,10 @@ export class RpgUi {
       const row = el(`<div class="item"><div><b>${def.name}</b>${n > 1 ? ` ×${n}` : ''}<small>${def.desc} ${stat}</small></div><button ${equipped ? 'disabled' : ''}>${action}</button></div>`);
       row.querySelector('button')!.addEventListener('click', () => {
         if (def.kind === 'consumable') this.onUsePotion?.(id);
-        else this.state.equip(id);
+        else {
+          audio.play('equip', { bus: 'ui', volume: 0.8 });
+          this.state.equip(id);
+        }
       });
       box.append(row);
     }
@@ -251,7 +260,10 @@ export class RpgUi {
     for (const id of SHOP_STOCK) {
       const def = ITEMS[id];
       const row = el(`<div class="item"><div><b>${def.name}</b><small>${def.desc}</small></div><button ${this.state.data.gold < def.price ? 'disabled' : ''}>◈ ${def.price}</button></div>`);
-      row.querySelector('button')!.addEventListener('click', () => this.state.buy(id));
+      row.querySelector('button')!.addEventListener('click', () => {
+        if (this.state.buy(id)) audio.play('coins', { bus: 'ui' });
+        else audio.play('error', { bus: 'ui' });
+      });
       box.append(row);
     }
     return box;
