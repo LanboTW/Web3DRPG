@@ -316,6 +316,36 @@ export class Player implements Combatant {
     this.lockTarget = this.findLockTarget(enemies, cameraYaw);
   }
 
+  /**
+   * Moves the lock to the nearest enemy on the given side of the current target
+   * (as seen from the camera). Returns false when there is none.
+   */
+  switchLock(enemies: Enemy[], cameraYaw: number, dir: number): boolean {
+    const current = this.lockTarget;
+    if (!current) return false;
+    const fx = -Math.sin(cameraYaw);
+    const fz = -Math.cos(cameraYaw);
+    const angle = (e: Enemy) => {
+      const dx = e.position.x - this.position.x;
+      const dz = e.position.z - this.position.z;
+      // Signed bearing: positive = right of the camera's view.
+      return Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz);
+    };
+    const base = angle(current);
+    let best: Enemy | null = null;
+    let bestDelta = Infinity;
+    for (const e of enemies) {
+      if (!e.alive || e === current || e.position.distanceTo(this.position) > LOCK_RANGE) continue;
+      const delta = (angle(e) - base) * dir;
+      if (delta > 0 && delta < bestDelta) {
+        bestDelta = delta;
+        best = e;
+      }
+    }
+    if (best) this.lockTarget = best;
+    return !!best;
+  }
+
   private findLockTarget(enemies: Enemy[], cameraYaw: number, exclude?: Enemy): Enemy | null {
     const fx = -Math.sin(cameraYaw);
     const fz = -Math.cos(cameraYaw);
@@ -364,7 +394,13 @@ export class Player implements Combatant {
     const wish = new THREE.Vector3(fx * input.move.y - fz * input.move.x, 0, fz * input.move.y + fx * input.move.x);
     const wishLen = Math.min(1, wish.length());
 
-    if (input.wasPressed('lock')) this.toggleLock(enemies, cameraYaw);
+    if (input.wasPressed('lock')) {
+      // On touch, tapping the lock button again steps right through the targets,
+      // then releases the lock once there are none left.
+      if (!(input.touch && this.switchLock(enemies, cameraYaw, 1))) this.toggleLock(enemies, cameraYaw);
+    } else if (input.flick && this.lockTarget) {
+      this.switchLock(enemies, cameraYaw, input.flick);
+    }
 
     const busy = this.staggerTimer > 0 || this.dodgeTimer > 0;
     const canAct = !busy && (!this.move || (this.move.chainAt !== undefined && this.moveTime >= this.move.chainAt));

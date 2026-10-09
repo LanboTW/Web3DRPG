@@ -30,9 +30,9 @@ export const zhTW = {
   'settings.reset': '重新開始',
   'settings.resetConfirm': '確定要刪除進度並重新開始嗎？',
   'settings.importFail': '存檔格式不正確',
-  'help.pc': 'WASD 移動・Shift 奔跑・滑鼠 轉視角・滾輪 縮放\n左鍵 攻擊・右鍵/C 按住格擋（抓準時機＝完美格擋）・空白鍵 閃避\nQ/E 技能・R 奧義・Tab/中鍵 鎖定・F 交談・H 藥水・I 選單・Esc 釋放滑鼠',
-  'help.touch': '左側搖桿 移動（推到底奔跑）・右側滑動 轉視角\n右下按鈕 攻擊／閃避／按住格擋／技能',
-  'help.gamepad': '手把：左搖桿 移動（按下 L3 奔跑）・右搖桿 視角・X 攻擊・A 閃避\n按住 LB 格擋・RB/RT 技能・Y 奧義・R3 鎖定\nB 交談・十字鍵上 藥水・Start 選單',
+  'help.pc': 'WASD 移動・Shift 奔跑・滑鼠 轉視角・滾輪 縮放\n左鍵 攻擊・右鍵/C 按住格擋（抓準時機＝完美格擋）・空白鍵 閃避\nQ/E 技能・R 奧義・V/中鍵 鎖定（鎖定中左右甩滑鼠切換目標）\nF 互動・H 藥水・Tab/I 選單・M 地圖・Esc 暫停',
+  'help.touch': '左側搖桿 移動（推到底奔跑）・右側滑動 轉視角\n右下按鈕 攻擊／閃避／按住格擋／技能\n鎖定中再按「鎖定」切換目標・點小地圖開啟地圖',
+  'help.gamepad': '手把：左搖桿 移動（按下 L3 奔跑）・右搖桿 視角・X 攻擊・A 閃避\n按住 LB 格擋・RB/RT 技能・Y 奧義・R3 鎖定（右搖桿左右推到底切換目標）\nB 互動・十字鍵上 藥水・Start 選單・Back 地圖',
   'enemy.bandit': '山賊',
   'enemy.skeleton': '骷髏戰士',
   'enemy.knight': '亡靈騎士・蓋爾德',
@@ -45,7 +45,8 @@ export const zhTW = {
   'hud.respawn': '將在村莊甦醒…',
   'hud.bossDefeated': '亡靈騎士已被擊敗',
   'loading.enemies': '喚醒敵人…',
-  'hint.clickToPlay': '點擊畫面開始操作',
+  'hint.clickToPlay': '點擊開始',
+  'hint.clickToResume': '點擊繼續',
   'error.renderer': '你的瀏覽器不支援 WebGPU / WebGL2，無法執行遊戲。',
 } as const;
 

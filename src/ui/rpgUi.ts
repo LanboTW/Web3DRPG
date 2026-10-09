@@ -69,10 +69,15 @@ export class RpgUi {
     setTimeout(() => t.remove(), 3200);
   }
 
-  setPrompt(npc: NpcId | null): void {
-    this.prompt.textContent = npc && !this.dialogOpen ? `[F] 與 ${NPC_NAMES[npc]} 交談` : '';
-    this.prompt.style.display = npc && !this.dialogOpen ? '' : 'none';
-    if (this.interactBtn) this.interactBtn.hidden = !npc || this.dialogOpen;
+  /** Interaction hint such as "與 村長 交談"; `button` labels the touch button. */
+  setPrompt(text: string | null, button = '交談', key = '[F] '): void {
+    const show = !!text && !this.dialogOpen;
+    this.prompt.textContent = show ? `${key}${text}` : '';
+    this.prompt.style.display = show ? '' : 'none';
+    if (this.interactBtn) {
+      this.interactBtn.hidden = !show;
+      if (show && this.interactBtn.textContent !== button) this.interactBtn.textContent = button;
+    }
   }
 
   /** Name tags with quest markers: ! = new quest, ? = ready to turn in. */

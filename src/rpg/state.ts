@@ -23,6 +23,10 @@ export interface SaveData {
   equipped: { weapon: string; armor: string; shield: string };
   quests: Record<string, { state: QuestState; progress: number }>;
   bossDefeated: boolean;
+  /** Ids of treasure chests already looted. */
+  openedChests: string[];
+  /** The first-combat tutorial was finished or skipped. */
+  tutorialDone: boolean;
 }
 
 const SAVE_KEY = 'web3drpg.save';
@@ -41,6 +45,8 @@ function fresh(): SaveData {
     equipped: { weapon: 'iron_sword', armor: 'cloth', shield: 'wood_shield' },
     quests: Object.fromEntries(Object.keys(QUESTS).map((id) => [id, { state: 'inactive' as QuestState, progress: 0 }])),
     bossDefeated: false,
+    openedChests: [],
+    tutorialDone: false,
   };
 }
 
@@ -72,6 +78,8 @@ export class GameState {
     if (!s || s.version !== 1 || typeof s.level !== 'number' || !s.attrs || !s.inventory || !s.equipped) return null;
     const base = fresh();
     for (const id of Object.keys(base.quests)) s.quests[id] ??= base.quests[id];
+    if (!Array.isArray(s.openedChests)) s.openedChests = [];
+    s.tutorialDone ??= false;
     // Saves from before shields existed start with the wooden one.
     if (!s.equipped.shield) {
       s.equipped.shield = 'wood_shield';
@@ -191,6 +199,21 @@ export class GameState {
     this.data.gold -= def.price;
     this.addItem(id);
     return true;
+  }
+
+  /** Loots a chest once; returns false if it was already opened. */
+  openChest(id: string, loot: { gold: number; items: Record<string, number> }): boolean {
+    if (this.data.openedChests.includes(id)) return false;
+    this.data.openedChests.push(id);
+    this.addGold(loot.gold);
+    this.notify(`獲得 ◈ ${loot.gold}`);
+    for (const [item, n] of Object.entries(loot.items)) this.addItem(item, n);
+    return true;
+  }
+
+  finishTutorial(): void {
+    this.data.tutorialDone = true;
+    this.changed();
   }
 
   quest(id: string) {

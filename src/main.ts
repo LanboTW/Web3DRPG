@@ -14,7 +14,7 @@ import { createTerrainMaterial } from './game/terrainMaterial';
 import { Player } from './game/player';
 import { loadCharacter } from './game/character';
 import { ThirdPersonCamera } from './game/camera';
-import { BANDIT_CAMP, groundAt, RUINS_CENTER, streamQuery, VILLAGE_CENTER, VILLAGE_RADIUS } from './game/terrain';
+import { BANDIT_CAMP, DAIS, groundAt, RUINS_CENTER, streamQuery, VILLAGE_CENTER, VILLAGE_RADIUS } from './game/terrain';
 import { audio, type MusicTrack } from './game/audio';
 import { hideLoading, nextFrame, setProgress, showError } from './ui/loading';
 import { Hud } from './ui/hud';
@@ -25,8 +25,12 @@ import type { CombatEvents } from './game/combat';
 import { Npc, INTERACT_RANGE } from './game/npc';
 import { GameState } from './rpg/state';
 import { ITEMS } from './rpg/items';
-import { QUESTS, dialogFor, type NpcId } from './rpg/quests';
+import { NPC_NAMES, QUESTS, dialogFor, type NpcId } from './rpg/quests';
 import { RpgUi } from './ui/rpgUi';
+import { Minimap } from './ui/minimap';
+import { CombatTutorial, PointerGate } from './ui/guide';
+import type { Chest } from './game/world';
+import type { ColliderWorld } from './game/colliders';
 
 async function main(): Promise<void> {
   applyI18n();
@@ -130,6 +134,68 @@ async function main(): Promise<void> {
   const hud = new Hud(input, quality, choice, backend, state);
   const combatHud = new CombatHud(cam.camera, input.touch);
   const ui = new RpgUi(state);
+  const minimap = new Minimap(world.colliders);
+  minimap.onOpen = () => {
+    if (!ui.menuOpen && !ui.dialogOpen) minimap.show();
+  };
+  const gate = new PointerGate(input);
+  const tutorial = new CombatTutorial(input);
+  tutorial.onFinish = () => state.finishTutorial();
+  if (import.meta.env.DEV) bindColliderDebug(world.scene, world.colliders);
+
+  // Treasure chests: loot once, remembered in the save.
+  const CHEST_RANGE = 2.2;
+  const unopened = () => world.chests.filter((c) => !state.data.openedChests.includes(c.id));
+  let chestAnim: { chest: Chest; t: number } | null = null;
+  const openChest = (chest: Chest) => {
+    if (!state.openChest(chest.id, chest.loot)) return;
+    chestAnim = { chest, t: 0 };
+    const at = chest.position.clone().setY(chest.position.y + 0.5);
+    audio.play('step_wood', { at, rate: 0.6, volume: 1 });
+    audio.play('leather', { at, delay: 0.15 });
+    audio.play('magic', { at, delay: 0.35, volume: 0.8 });
+    vfx.ring(chest.position.clone().setY(chest.position.y + 0.05), 1.4, 0xffd27a, 0.6);
+  };
+  const animateChest = (dt: number) => {
+    if (!chestAnim) return;
+    const a = chestAnim;
+    a.t += dt;
+    const o = a.chest.object;
+    // Rattle, pop, then a shower of gold.
+    const k = Math.max(0, 1 - a.t / 0.6);
+    o.rotation.z = Math.sin(a.t * 45) * 0.06 * k;
+    const pop = a.t > 0.3 && a.t < 0.7 ? Math.sin(((a.t - 0.3) / 0.4) * Math.PI) * 0.12 : 0;
+    o.scale.setScalar(1 + pop);
+    if (a.t > 0.35 && a.t - dt <= 0.35) {
+      const at = a.chest.position.clone().setY(a.chest.position.y + 0.7);
+      vfx.spark(at, 0xffd27a, 18);
+      vfx.burst(at, 1.2, 0xffc040, 0.5);
+    }
+    if (a.t > 0.8) {
+      o.rotation.z = 0;
+      o.scale.setScalar(1);
+      chestAnim = null;
+    }
+  };
+
+  // Where the quest tracker points: the main quest first, then active side quests.
+  const objective = new THREE.Vector2();
+  const npcPos = (id: NpcId) => npcs.find((n) => n.id === id)!.position;
+  const questObjective = (): THREE.Vector2 | null => {
+    const main = state.quest('main_knight');
+    if (main.state === 'inactive' || main.state === 'ready') return objective.set(npcPos('chief').x, npcPos('chief').z);
+    if (main.state === 'active') return objective.set(DAIS.x, DAIS.z);
+    for (const id of ['side_bandits', 'side_undead']) {
+      const q = state.quest(id);
+      if (q.state === 'ready') return objective.set(npcPos(QUESTS[id].giver).x, npcPos(QUESTS[id].giver).z);
+      if (q.state === 'active') return id === 'side_bandits' ? objective.set(BANDIT_CAMP.x, BANDIT_CAMP.y) : objective.set(RUINS_CENTER.x, RUINS_CENTER.y + 25);
+    }
+    return null;
+  };
+  const questMark = (id: NpcId) => {
+    const q = state.quest(questOf[id]).state;
+    return q === 'inactive' ? '!' : q === 'ready' ? '?' : '';
+  };
 
   const usePotion = (id?: string) => {
     const missing = player.stats.maxHp - player.hp;
@@ -183,6 +249,8 @@ async function main(): Promise<void> {
     }
   };
   let deadTime = 0;
+  // The mouse is recaptured when a menu or dialog closes (that click or key press is the gesture).
+  let wantedLock = true;
 
   window.addEventListener('resize', () => {
     cam.setAspect(window.innerWidth / window.innerHeight);
@@ -231,31 +299,67 @@ async function main(): Promise<void> {
     const dt = hitStop > 0 ? realDt * 0.08 : realDt;
 
     input.update(realDt);
-    if (input.wasPressed('menu') && !ui.dialogOpen) ui.toggleMenu();
-    const paused = ui.menuOpen;
+    // Modal layers: map, menu, settings. Tab/M/Esc close whichever is on top.
+    const closing = input.wasPressed('menu') || input.wasPressed('map') || input.wasPressed('back');
+    if (minimap.open) {
+      if (closing) minimap.close();
+    } else if (ui.menuOpen) {
+      if (input.wasPressed('menu') || input.wasPressed('back')) ui.closeMenu();
+    } else if (hud.panelOpen) {
+      if (closing) hud.closePanel();
+    } else if (!ui.dialogOpen) {
+      if (input.wasPressed('menu')) ui.toggleMenu();
+      else if (input.wasPressed('map')) minimap.show();
+    }
+    const modal = minimap.open || ui.menuOpen || hud.panelOpen;
+    // Mouse players need the pointer captured; until then the game waits behind a gate.
+    const needsGate = !input.touch && !input.hasPad && !modal && !ui.dialogOpen && !input.pointerLocked;
+    gate.set(needsGate);
+    const wantLock = !input.touch && !modal && !ui.dialogOpen;
+    if (wantLock && !wantedLock) input.requestLock();
+    wantedLock = wantLock;
+    const paused = modal || gate.visible;
     if (ui.dialogOpen) {
-      if (input.wasPressed('interact') || input.wasPressed('attack')) ui.advance();
+      if (input.wasPressed('interact') || input.wasPressed('dodge')) ui.advance();
       input.suppress();
     } else if (paused) {
       input.suppress();
+    } else {
+      if (!state.data.tutorialDone && enemies.list.some((e) => e.alive && e.engaged && e.position.distanceTo(player.position) < 25)) tutorial.start();
+      tutorial.update(realDt, player);
     }
     if (talkingTo && !ui.dialogOpen) {
       talkingTo.talking = false;
       talkingTo = null;
     }
 
-    // Nearest NPC in range offers a conversation.
+    // Nearest NPC or unopened chest in range offers an interaction.
     let near: Npc | null = null;
+    let nearChest: Chest | null = null;
+    let best = Infinity;
     for (const n of npcs) {
-      if (n.position.distanceTo(player.position) < INTERACT_RANGE && (!near || n.position.distanceTo(player.position) < near.position.distanceTo(player.position))) near = n;
+      const d = n.position.distanceTo(player.position);
+      if (d < INTERACT_RANGE && d < best) [near, best] = [n, d];
     }
-    ui.setPrompt(near && player.alive ? near.id : null);
-    if (near && input.wasPressed('interact') && !ui.dialogOpen) {
-      const q = state.quest(questOf[near.id]);
-      talkingTo = near;
-      near.talking = true;
-      ui.openDialog(near.id, dialogFor(near.id, q.state, q.progress));
-      input.suppress();
+    for (const c of unopened()) {
+      const d = c.position.distanceTo(player.position);
+      if (d < CHEST_RANGE && d < best) [near, nearChest, best] = [null, c, d];
+    }
+    const key = input.touch ? '' : input.hasPad && !input.pointerLocked ? '[B] ' : '[F] ';
+    if (!player.alive) ui.setPrompt(null);
+    else if (near) ui.setPrompt(`與 ${NPC_NAMES[near.id]} 交談`, '交談', key);
+    else if (nearChest) ui.setPrompt('打開寶箱', '開啟', key);
+    else ui.setPrompt(null);
+    if (player.alive && input.wasPressed('interact') && !ui.dialogOpen) {
+      if (near) {
+        const q = state.quest(questOf[near.id]);
+        talkingTo = near;
+        near.talking = true;
+        ui.openDialog(near.id, dialogFor(near.id, q.state, q.progress));
+        input.suppress();
+      } else if (nearChest) {
+        openChest(nearChest);
+      }
     }
     if (input.wasPressed('potion')) usePotion();
 
@@ -264,6 +368,7 @@ async function main(): Promise<void> {
     enemies.update(worldDt, player, world.colliders, events);
     npcs.forEach((n) => n.update(worldDt, player.position));
     vfx.update(worldDt);
+    animateChest(worldDt);
     const lock = player.lockTarget ? player.lockTarget.chest(lockPos) : null;
     cam.update(realDt, input, player.position, player.eyeHeight, world.cameraBlockers, lock);
     world.follow(player.position, realDt);
@@ -282,6 +387,14 @@ async function main(): Promise<void> {
     }
     combatHud.update(player, enemies.list, enemies.boss);
     ui.updateTags(npcs, cam.camera, player.position, questOf);
+    minimap.update(realDt, cam.yaw, {
+      player: player.position,
+      facing: player.facing,
+      npcs: npcs.map((n) => ({ position: n.position, mark: questMark(n.id) })),
+      enemies: enemies.list.filter((e) => e.alive).map((e) => ({ position: e.position, boss: !!e.def.boss })),
+      chests: unopened().map((c) => c.position),
+      objective: questObjective(),
+    });
 
     audio.setListener(cam.camera);
     soundTick -= realDt;
@@ -296,6 +409,39 @@ async function main(): Promise<void> {
     post.render();
     dynRes.update(dt);
     hud.update(dt, dynRes.scale);
+  });
+}
+
+/** Dev only: the backquote key toggles wireframes of every collider. */
+function bindColliderDebug(scene: THREE.Scene, colliders: ColliderWorld): void {
+  let lines: THREE.LineSegments | null = null;
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Backquote') return;
+    if (!lines) {
+      const pts: number[] = [];
+      const seg = (ax: number, az: number, bx: number, bz: number) => pts.push(ax, groundAt(ax, az) + 0.3, az, bx, groundAt(bx, bz) + 0.3, bz);
+      for (const c of colliders.all()) {
+        if (c.kind === 'circle') {
+          for (let i = 0; i < 16; i++) {
+            const a = (i / 16) * Math.PI * 2, b = ((i + 1) / 16) * Math.PI * 2;
+            seg(c.x + Math.cos(a) * c.r, c.z + Math.sin(a) * c.r, c.x + Math.cos(b) * c.r, c.z + Math.sin(b) * c.r);
+          }
+        } else {
+          const cos = Math.cos(c.rot), sin = Math.sin(c.rot);
+          const corner = (lx: number, lz: number): [number, number] => [c.x + lx * cos + lz * sin, c.z - lx * sin + lz * cos];
+          const k = [corner(-c.hw, -c.hd), corner(c.hw, -c.hd), corner(c.hw, c.hd), corner(-c.hw, c.hd)];
+          for (let i = 0; i < 4; i++) seg(...k[i], ...k[(i + 1) % 4]);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xff2bd6, depthTest: false }));
+      lines.renderOrder = 999;
+      lines.frustumCulled = false;
+      lines.visible = false;
+      scene.add(lines);
+    }
+    lines.visible = !lines.visible;
   });
 }
 

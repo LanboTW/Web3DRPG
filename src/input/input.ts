@@ -1,17 +1,20 @@
 import { isTouchDevice } from '../engine/quality';
 
-export type Action = 'attack' | 'dodge' | 'block' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact' | 'potion' | 'menu';
+export type Action = 'attack' | 'dodge' | 'block' | 'skill1' | 'skill2' | 'ultimate' | 'lock' | 'interact' | 'potion' | 'menu' | 'map' | 'back' | 'skip';
 
 const KEY_ACTIONS: Record<string, Action> = {
   Space: 'dodge',
   KeyQ: 'skill1',
   KeyE: 'skill2',
   KeyR: 'ultimate',
-  Tab: 'lock',
+  KeyV: 'lock',
   KeyF: 'interact',
   KeyH: 'potion',
+  Tab: 'menu',
   KeyI: 'menu',
-  KeyM: 'menu',
+  KeyM: 'map',
+  Escape: 'back',
+  KeyX: 'skip',
 };
 
 // Standard Gamepad API mapping (Xbox layout names).
@@ -25,6 +28,7 @@ const PAD_ACTIONS: [number, Action][] = [
   [1, 'interact'], // B
   [12, 'potion'], // D-pad up
   [9, 'menu'], // Start
+  [8, 'map'], // Back / View
 ];
 const PAD_BLOCK = 4; // LB (held)
 const PAD_SPRINT_HOLD = 6; // LT (held)
@@ -33,6 +37,9 @@ const PAD_SPRINT_TOGGLE = 10; // L3: sprint until the stick is released
 const KEY_BLOCK = 'KeyC';
 const STICK_DEADZONE = 0.18;
 const JOY_RADIUS = 50;
+/** Horizontal mouse travel (px, decaying over ~0.1 s) that counts as a target-switch flick. */
+const FLICK_PX = 110;
+const FLICK_COOLDOWN = 0.3;
 
 /**
  * Merges keyboard/mouse, touch and gamepad into one per-frame state.
@@ -50,6 +57,10 @@ export class Input {
   block = false;
   pointerLocked = false;
   readonly touch = isTouchDevice();
+  /** A gamepad is connected; the click-to-start gate is not needed. */
+  hasPad = false;
+  /** -1 / +1 on the frame the player flicks the mouse (or right stick) sideways to switch lock-on target. */
+  flick = 0;
 
   private keys = new Set<string>();
   private pressed = new Set<Action>();
@@ -64,10 +75,15 @@ export class Input {
   private mouseBlock = false;
   private touchBlock = false;
   private padSprintToggle = false;
+  private flickAcc = 0;
+  private flickCooldown = 0;
+  private padFlickArmed = true;
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
+      // Space would otherwise "click" a focused dialog button.
+      if (e.code === 'Space' && document.activeElement instanceof HTMLButtonElement) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
       const action = KEY_ACTIONS[e.code];
@@ -85,6 +101,16 @@ export class Input {
 
   wasPressed(action: Action): boolean {
     return this.pressed.has(action);
+  }
+
+  /** Captures the mouse for camera control. Must follow a user gesture to succeed. */
+  requestLock(): void {
+    if (this.touch || this.pointerLocked) return;
+    try {
+      Promise.resolve(this.canvas.requestPointerLock?.()).catch(() => {});
+    } catch {
+      /* not allowed right now; the click-to-continue gate handles it */
+    }
   }
 
   /** Lets UI widgets (touch buttons) inject actions. */
@@ -109,10 +135,20 @@ export class Input {
     const MOUSE_SENS = 0.0025;
     let lx = this.mouseDX * MOUSE_SENS;
     let ly = this.mouseDY * MOUSE_SENS;
+    // A quick sideways flick (vertical motion ignored) switches the lock-on target.
+    this.flick = 0;
+    this.flickCooldown = Math.max(0, this.flickCooldown - dt);
+    this.flickAcc = this.flickAcc * Math.exp(-dt * 10) + (this.touch ? 0 : this.mouseDX);
+    if (Math.abs(this.flickAcc) > FLICK_PX && this.flickCooldown <= 0) {
+      this.flick = Math.sign(this.flickAcc);
+      this.flickAcc = 0;
+      this.flickCooldown = FLICK_COOLDOWN;
+    }
     this.mouseDX = 0;
     this.mouseDY = 0;
 
     const pad = this.activeGamepad();
+    this.hasPad = !!pad;
     if (pad) {
       const [ax, ay, rx, ry] = [0, 1, 2, 3].map((i) => deadzone(pad.axes[i] ?? 0));
       mx += ax;
@@ -120,6 +156,11 @@ export class Input {
       const PAD_LOOK = 2.6;
       lx += rx * PAD_LOOK * dt;
       ly += ry * PAD_LOOK * dt;
+      // Right stick slammed sideways also switches targets; re-arms near centre.
+      if (Math.abs(rx) > 0.85 && this.padFlickArmed) {
+        this.padFlickArmed = false;
+        if (!this.flick) this.flick = Math.sign(rx);
+      } else if (Math.abs(rx) < 0.4) this.padFlickArmed = true;
       if (pad.buttons[PAD_SPRINT_TOGGLE]?.pressed) this.padSprintToggle = true;
       if (Math.hypot(ax, ay) < 0.2) this.padSprintToggle = false;
       if (pad.buttons[PAD_SPRINT_HOLD]?.pressed || this.padSprintToggle) sprint = true;
@@ -151,6 +192,7 @@ export class Input {
     this.look.x = this.look.y = 0;
     this.sprint = false;
     this.block = false;
+    this.flick = 0;
   }
 
   endFrame(): void {
@@ -166,33 +208,13 @@ export class Input {
 
   private bindMouse(): void {
     const canvas = this.canvas;
-    canvas.addEventListener('click', () => {
-      if (!this.pointerLocked) Promise.resolve(canvas.requestPointerLock?.()).catch(() => {});
-    });
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === canvas;
+      this.mouseBlock = false;
     });
-    let dragging = false;
-    let dragDistance = 0;
-    canvas.addEventListener('mousedown', (e) => {
-      // Right button raises the shield; only the left button drags the camera.
-      if (e.button === 2) {
-        this.mouseBlock = true;
-        return;
-      }
-      dragging = true;
-      dragDistance = 0;
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 2) this.mouseBlock = false;
-      // Without pointer lock a plain click (no drag) attacks.
-      if (dragging && !this.pointerLocked && e.button === 0 && dragDistance < 6) this.pressed.add('attack');
-      dragging = false;
-    });
+    // The camera only turns while the pointer is captured; there is no drag fallback.
     document.addEventListener('mousemove', (e) => {
-      if (dragging) dragDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
-      // Without pointer lock (e.g. inside an iframe) a held button drags the camera.
-      if (!this.pointerLocked && !dragging) return;
+      if (!this.pointerLocked) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
@@ -203,6 +225,10 @@ export class Input {
         e.preventDefault();
         this.pressed.add('lock');
       }
+      if (e.button === 2) this.mouseBlock = true;
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 2) this.mouseBlock = false;
     });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();

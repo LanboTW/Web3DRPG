@@ -22,8 +22,17 @@ export interface World {
   /** Meshes the camera must not clip through. */
   cameraBlockers: THREE.Object3D[];
   terrain: THREE.Mesh;
+  chests: Chest[];
   /** Keeps the sky dome and sun shadow centred on the player and blends the ruins' mist. */
   follow(target: THREE.Vector3, dt: number): void;
+}
+
+/** A lootable treasure chest. */
+export interface Chest {
+  id: string;
+  object: THREE.Object3D;
+  position: THREE.Vector3;
+  loot: { gold: number; items: Record<string, number> };
 }
 
 export function createWorld(quality: QualitySettings, terrainMaterial: THREE.Material, atmosphere: Atmosphere, fogNode: THREE.Node, props: PropLibrary): World {
@@ -57,17 +66,18 @@ export function createWorld(quality: QualitySettings, terrainMaterial: THREE.Mat
 
   const colliders = new ColliderWorld();
   const cameraBlockers: THREE.Object3D[] = [];
+  const chests: Chest[] = [];
 
-  buildVillage(scene, props, colliders, cameraBlockers);
+  buildVillage(scene, props, colliders, cameraBlockers, chests);
   buildRuins(scene, props, colliders, cameraBlockers);
-  buildCamp(scene, props, colliders, cameraBlockers);
+  buildCamp(scene, props, colliders, cameraBlockers, chests);
   buildRocks(scene, props, colliders, cameraBlockers, quality.vegetationDensity);
   buildBridge(scene, props, colliders);
   scene.add(createWater());
 
   let mist = 0;
   return {
-    scene, sun, colliders, cameraBlockers, terrain,
+    scene, sun, colliders, cameraBlockers, terrain, chests,
     follow(target, dt) {
       sky.position.copy(target);
       sun.position.copy(target).addScaledVector(SUN_DIRECTION, 100);
@@ -115,7 +125,7 @@ function local(x: number, z: number, rot: number, lx: number, lz: number): [numb
 }
 
 // ---------------------------------------------------------------- village
-function buildVillage(scene: THREE.Scene, props: PropLibrary, colliders: ColliderWorld, blockers: THREE.Object3D[]): void {
+function buildVillage(scene: THREE.Scene, props: PropLibrary, colliders: ColliderWorld, blockers: THREE.Object3D[], chests: Chest[]): void {
   const { x: vx, y: vz } = VILLAGE_CENTER;
   const rand = rng(31);
   // [offsetX, offsetZ, asset] — houses face the square.
@@ -138,7 +148,7 @@ function buildVillage(scene: THREE.Scene, props: PropLibrary, colliders: Collide
     const w = size.x - 1.5, d = size.z - 1.4;
     const house = placeProp(scene, props, asset, x, z, rot, { sink: 0.15 });
     blockers.push(house);
-    colliders.add({ kind: 'box', x, z, hw: w / 2 + 0.2, hd: d / 2 + 0.2, rot });
+    colliders.add({ kind: 'box', x, z, hw: w / 2, hd: d / 2, rot });
     // A little clutter beside the front corners.
     for (const side of [-1, 1]) {
       if (rand() < 0.25) continue;
@@ -160,8 +170,10 @@ function buildVillage(scene: THREE.Scene, props: PropLibrary, colliders: Collide
   placeProp(scene, props, 'crate_long', vx - 11.2, vz - 6.2, 0.6);
   placeProp(scene, props, 'barrel', vx - 10.2, vz - 7.3, 0);
   placeProp(scene, props, 'barrel', vx - 11.6, vz - 4.6, 0);
-  placeProp(scene, props, 'chest', vx - 12, vz - 2.8, 1.2);
+  const chest = placeProp(scene, props, 'chest', vx - 12, vz - 2.8, 1.2);
+  chests.push({ id: 'village', object: chest, position: chest.position, loot: { gold: 30, items: { potion: 2 } } });
   colliders.add({ kind: 'circle', x: vx - 11, z: vz - 5.5, r: 1.6 });
+  colliders.add({ kind: 'circle', x: vx - 12, z: vz - 2.8, r: 0.55 });
   placeProp(scene, props, 'log', vx + 13.5, vz - 10, 0.4, { scale: [1, 1.5, 1.5] });
   placeProp(scene, props, 'log', vx + 13.4, vz - 9.4, 0.5, { scale: [1, 1.5, 1.5], y: heightAt(vx + 13.4, vz - 9.4) + 0.3 });
   const axe = placeProp(scene, props, 'axe', vx + 12.6, vz - 9.4, 1.0, { y: heightAt(vx + 12.6, vz - 9.4) + 0.05 });
@@ -184,7 +196,10 @@ function buildVillage(scene: THREE.Scene, props: PropLibrary, colliders: Collide
     const x = vx + Math.cos(a + step / 2) * R;
     const z = vz + Math.sin(a + step / 2) * R;
     if (roadDistance(x, z) < 5) continue;
-    fence.push(new THREE.Matrix4().compose(new THREE.Vector3(x, heightAt(x, z) - 0.05, z), new THREE.Quaternion().setFromAxisAngle(UP, -(a + step / 2) + Math.PI / 2), new THREE.Vector3(1, 1, 1)));
+    const rot = -(a + step / 2) + Math.PI / 2;
+    fence.push(new THREE.Matrix4().compose(new THREE.Vector3(x, heightAt(x, z) - 0.05, z), new THREE.Quaternion().setFromAxisAngle(UP, rot), new THREE.Vector3(1, 1, 1)));
+    // The rail runs along the fence's local X.
+    colliders.add({ kind: 'box', x, z, hw: 1.55, hd: 0.15, rot });
   }
   scene.add(props.instanced('fence', fence));
 }
@@ -255,7 +270,7 @@ function buildRuins(scene: THREE.Scene, props: PropLibrary, colliders: ColliderW
 }
 
 // ---------------------------------------------------------------- bandit camp
-function buildCamp(scene: THREE.Scene, props: PropLibrary, colliders: ColliderWorld, blockers: THREE.Object3D[]): void {
+function buildCamp(scene: THREE.Scene, props: PropLibrary, colliders: ColliderWorld, blockers: THREE.Object3D[], chests: Chest[]): void {
   const { x: cx, y: cz } = BANDIT_CAMP;
   const tents: [number, number, string][] = [[-7, 6, 'tent'], [7, 7, 'tent_small'], [0, -9, 'tent'], [-9, -4, 'tent_small']];
   for (const [ox, oz, asset] of tents) {
@@ -286,7 +301,8 @@ function buildCamp(scene: THREE.Scene, props: PropLibrary, colliders: ColliderWo
     ['chest', 0.4, -6.3, 3.0], ['barrel', 9.2, 4.4, 0], ['crate_small', -6.4, 2.9, 1.9],
   ];
   for (const [name, ox, oz, rot] of goods) {
-    placeProp(scene, props, name, cx + ox, cz + oz, rot);
+    const obj = placeProp(scene, props, name, cx + ox, cz + oz, rot);
+    if (name === 'chest') chests.push({ id: 'camp', object: obj, position: obj.position, loot: { gold: 80, items: { potion: 3 } } });
     colliders.add({ kind: 'circle', x: cx + ox, z: cz + oz, r: 0.6 });
   }
   const shield = placeProp(scene, props, 'shield', cx + 3.2, cz + 2.45, 0.7);

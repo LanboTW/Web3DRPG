@@ -6,7 +6,6 @@ import { audio, type AudioSettings } from '../game/audio';
 
 export class Hud {
   private stats = document.getElementById('stats')!;
-  private hint = document.getElementById('hint')!;
   private panel = document.getElementById('settings')!;
   private frames = 0;
   private elapsed = 0;
@@ -39,7 +38,14 @@ export class Hud {
       this.frames = 0;
       this.elapsed = 0;
     }
-    this.hint.textContent = !this.input.touch && !this.input.pointerLocked && this.panel.hidden ? t('hint.clickToPlay') : '';
+  }
+
+  get panelOpen(): boolean {
+    return !this.panel.hidden;
+  }
+
+  closePanel(): void {
+    this.panel.hidden = true;
   }
 
   private renderPanel(): void {
