@@ -26,6 +26,8 @@ export class PointerGate {
   set(show: boolean): void {
     if (show === this.visible) return;
     this.el.hidden = !show;
+    // The title screen is only for the first start; resuming shows a light one-line hint.
+    this.el.classList.toggle('resume', this.started);
     if (show) this.el.querySelector('.gate-go')!.textContent = t(this.started ? 'hint.clickToResume' : 'hint.clickToPlay');
     else this.started = true;
   }

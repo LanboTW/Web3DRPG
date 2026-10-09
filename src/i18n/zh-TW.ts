@@ -46,7 +46,8 @@ export const zhTW = {
   'hud.bossDefeated': '亡靈騎士已被擊敗',
   'loading.enemies': '喚醒敵人…',
   'hint.clickToPlay': '點擊開始',
-  'hint.clickToResume': '點擊繼續',
+  'hint.clickToResume': '點一下畫面繼續',
+  'settings.resume': '繼續遊戲',
   'error.renderer': '你的瀏覽器不支援 WebGPU / WebGL2，無法執行遊戲。',
 } as const;
 

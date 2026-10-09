@@ -55,6 +55,7 @@ export class Hud {
     const options: QualityChoice[] = ['auto', 'low', 'medium', 'high'];
     const label = (c: QualityChoice) => (c === 'auto' ? t('settings.auto') : t(`quality.${c}`));
     this.panel.innerHTML = `
+      <button class="resume-btn">${t('settings.resume')}</button>
       <h3>${t('settings.title')}</h3>
       <div>${t('settings.quality')}</div>
       <div class="row">${options
@@ -73,6 +74,11 @@ export class Hud {
         <button data-save="import">${t('settings.import')}</button>
         <button data-save="reset">${t('settings.reset')}</button>
       </div>`;
+    // A click is a user gesture, so the pointer can be captured again right away.
+    this.panel.querySelector('.resume-btn')!.addEventListener('click', () => {
+      this.closePanel();
+      this.input.requestLock();
+    });
     this.panel.querySelector('[data-save="export"]')!.addEventListener('click', () => {
       const blob = new Blob([this.state.exportJson()], { type: 'application/json' });
       const a = document.createElement('a');

@@ -334,11 +334,11 @@ async function main(): Promise<void> {
     const modal = minimap.open || ui.menuOpen || hud.panelOpen;
     // Mouse players need the pointer captured; until then the game waits behind a gate.
     const needsGate = !input.touch && !input.hasPad && !modal && !ui.dialogOpen && !input.pointerLocked;
-    gate.set(needsGate);
+    gate.set(needsGate && !input.lockPending);
     const wantLock = !input.touch && !modal && !ui.dialogOpen;
     if (wantLock && !wantedLock) input.requestLock();
     wantedLock = wantLock;
-    const paused = modal || gate.visible;
+    const paused = modal || needsGate;
     if (ui.dialogOpen) {
       if (input.wasPressed('interact') || input.wasPressed('dodge')) ui.advance();
       input.suppress();

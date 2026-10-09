@@ -231,7 +231,14 @@ html, body {
 #gate .gate-title { font-size: clamp(30px, 6vw, 56px); letter-spacing: 0.2em; color: var(--accent); font-weight: 600; text-shadow: 0 2px 12px #000; }
 #gate .gate-go { font-size: 22px; letter-spacing: 0.3em; color: var(--text); animation: gate-pulse 1.6s ease-in-out infinite; }
 #gate .gate-help { color: var(--muted); font-size: 13px; line-height: 1.8; white-space: pre-line; max-width: 640px; }
+#gate.resume { background: none; }
+#gate.resume .gate-title, #gate.resume .gate-help { display: none; }
+#gate.resume .gate-go { font-size: 16px; letter-spacing: 0.15em; padding: 10px 22px; border-radius: 20px; background: rgba(10,11,14,0.6); }
 @keyframes gate-pulse { 50% { opacity: 0.45; } }
+#settings .resume-btn {
+  display: block; width: 100%; margin-bottom: 14px; padding: 10px; border-radius: 8px; border: 1px solid var(--accent);
+  background: var(--accent); color: #1a1408; font-size: 15px; font-weight: 600; cursor: pointer;
+}
 #tutorial {
   position: absolute; left: 50%; top: max(64px, calc(env(safe-area-inset-top) + 58px)); transform: translateX(-50%);
   background: rgba(14,15,18,0.78); border: 1px solid rgba(212,168,90,0.45); border-radius: 8px; padding: 8px 14px;

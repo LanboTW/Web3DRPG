@@ -30,6 +30,8 @@ const PAD_ACTIONS: [number, Action][] = [
   [9, 'menu'], // Start
   [8, 'map'], // Back / View
 ];
+/** How long browsers refuse a new pointer lock after the player released it with Esc. */
+const RELOCK_COOLDOWN = 1100;
 const PAD_BLOCK = 4; // LB (held)
 const PAD_SPRINT_HOLD = 6; // LT (held)
 const PAD_SPRINT_TOGGLE = 10; // L3: sprint until the stick is released
@@ -62,6 +64,8 @@ export class Input {
   /** -1 / +1 on the frame the player flicks the mouse (or right stick) sideways to switch lock-on target. */
   flick = 0;
 
+  private releasedAt = -Infinity;
+  private retryTimer = 0;
   private keys = new Set<string>();
   private pressed = new Set<Action>();
   private padPrev: boolean[] = [];
@@ -106,13 +110,34 @@ export class Input {
     return this.pressed.has(action);
   }
 
-  /** Captures the mouse for camera control. Must follow a user gesture to succeed. */
-  requestLock(): void {
+  /** A re-lock attempt is scheduled; the game waits for it instead of showing the click gate. */
+  get lockPending(): boolean {
+    return this.retryTimer !== 0;
+  }
+
+  /**
+   * Captures the mouse for camera control. Must follow a user gesture to succeed.
+   * After the player releases the lock with Esc, browsers refuse a new lock for
+   * about a second, so the request is retried until shortly after that window
+   * (still inside the ~5 s that the closing key press counts as a gesture).
+   */
+  requestLock(retryUntil = performance.now() + 2500): void {
     if (this.touch || this.pointerLocked) return;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = 0;
+    const retry = () => {
+      if (this.pointerLocked || performance.now() > retryUntil) return;
+      const wait = Math.max(250, this.releasedAt + RELOCK_COOLDOWN - performance.now());
+      this.retryTimer = window.setTimeout(() => {
+        this.retryTimer = 0;
+        this.requestLock(retryUntil);
+      }, wait);
+    };
+    if (performance.now() - this.releasedAt < RELOCK_COOLDOWN) return retry();
     try {
-      Promise.resolve(this.canvas.requestPointerLock?.()).catch(() => {});
+      Promise.resolve(this.canvas.requestPointerLock?.()).catch(retry);
     } catch {
-      /* not allowed right now; the click-to-continue gate handles it */
+      retry();
     }
   }
 
@@ -216,8 +241,17 @@ export class Input {
       const was = this.pointerLocked;
       this.pointerLocked = document.pointerLockElement === canvas;
       this.mouseBlock = false;
-      // The browser swallows the Esc that releases pointer lock, so report the release instead.
-      if (was && !this.pointerLocked) this.lockLost = true;
+      if (this.pointerLocked) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = 0;
+      }
+      if (!was || this.pointerLocked) return;
+      this.releasedAt = performance.now();
+      // The browser swallows the Esc that releases pointer lock, so report the release
+      // instead, unless it came from switching window or tab (the page loses focus).
+      setTimeout(() => {
+        if (document.hasFocus() && document.visibilityState === 'visible' && !this.pointerLocked) this.lockLost = true;
+      }, 100);
     });
     // The camera only turns while the pointer is captured; there is no drag fallback.
     document.addEventListener('mousemove', (e) => {
